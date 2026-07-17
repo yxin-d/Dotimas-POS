@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/*
+  Add these rules to your globals.css (or import this file there).
+  Handles 80mm thermal printer receipt layout.
+
+  In your layout.tsx, add this to <head>:
+    <link rel="stylesheet" href="/print.css" media="print" />
+
+  Or just paste into globals.css — the @media print block isolates it.
+*/
+
+@media print {
+  /* Hide everything except the receipt */
+  body > * { display: none !important; }
+  .receipt-only { display: block !important; }
+
+  /* Receipt sizing for 80mm thermal paper */
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  .receipt-only {
+    width: 72mm;           /* 80mm paper minus ~8mm margins */
+    padding: 4mm;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #000;
+  }
+
+  .receipt-content {
+    width: 100%;
+  }
+
+  /* No backgrounds, no shadows in print */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    box-shadow: none !important;
+    background: white !important;
+    color: #000 !important;
+  }
+}
