@@ -1,12 +1,8 @@
-// Auto-generate this file by running:
-// npx supabase gen types typescript --project-id YOUR_PROJECT_ID > src/types/database.ts
-//
-// The types below are hand-written to match your schema.
-// Replace with the generated version once your Supabase project is set up.
-
-export type PaymentMethod = 'cash' | 'gcash' | 'maya' | 'mixed'
+export type PaymentMethod   = 'cash' | 'gcash' | 'maya' | 'mixed' | 'credit'
 export type LedgerEntryType = 'credit_given' | 'payment_made'
 export type ExpenseCategory = 'supplies' | 'utilities' | 'salary' | 'maintenance' | 'food' | 'other'
+export type HoldStatus      = 'held' | 'completed' | 'voided'
+export type GcashDirection  = 'received' | 'sent'
 
 export interface Database {
   public: {
@@ -23,11 +19,22 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['customers']['Row'], 'id' | 'created_at' | 'loyalty_pts' | 'credit_balance'> & { id?: string }
         Update: Partial<Database['public']['Tables']['customers']['Insert']>
       }
+      product_categories: {
+        Row: {
+          id: string
+          name: string
+          sort_order: number
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['product_categories']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['product_categories']['Insert']>
+      }
       products: {
         Row: {
           id: string
           name: string
           barcode: string | null
+          category_id: string | null
           price: number
           srp: number | null
           cost: number | null
@@ -96,6 +103,47 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['expenses']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['expenses']['Insert']>
       }
+      held_invoices: {
+        Row: {
+          id: string
+          label: string
+          customer_id: string | null
+          items_json: CartItem[]
+          total: number
+          status: HoldStatus
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['held_invoices']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['held_invoices']['Insert']>
+      }
+      gcash_log: {
+        Row: {
+          id: string
+          direction: GcashDirection
+          amount: number
+          sender: string | null
+          ref_number: string | null
+          notes: string | null
+          txn_date: string
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['gcash_log']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['gcash_log']['Insert']>
+      }
+      pos_sessions: {
+        Row: {
+          id: string
+          session_date: string
+          starting_cash: number
+          closing_cash: number | null
+          notes: string | null
+          closed_at: string | null
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['pos_sessions']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['pos_sessions']['Insert']>
+      }
     }
     Views: {
       daily_summary: {
@@ -105,6 +153,8 @@ export interface Database {
           gross_sales: number
           total_profit: number
           credit_given: number
+          gcash_sales: number
+          cash_collected: number
         }
       }
       credit_summary: {
@@ -132,21 +182,28 @@ export interface Database {
   }
 }
 
-// ─── App-level types ────────────────────────────────────────
+// ─── App-level row types ────────────────────────────────────
 
-export type Customer    = Database['public']['Tables']['customers']['Row']
-export type Product     = Database['public']['Tables']['products']['Row']
-export type SaleInvoice = Database['public']['Tables']['sale_invoice']['Row']
-export type SaleLine    = Database['public']['Tables']['sales']['Row']
-export type LedgerEntry = Database['public']['Tables']['ledger']['Row']
-export type Expense     = Database['public']['Tables']['expenses']['Row']
+export type Customer        = Database['public']['Tables']['customers']['Row']
+export type ProductCategory = Database['public']['Tables']['product_categories']['Row']
+export type Product         = Database['public']['Tables']['products']['Row']
+export type SaleInvoice     = Database['public']['Tables']['sale_invoice']['Row']
+export type SaleLine        = Database['public']['Tables']['sales']['Row']
+export type LedgerEntry     = Database['public']['Tables']['ledger']['Row']
+export type Expense         = Database['public']['Tables']['expenses']['Row']
+export type HeldInvoice     = Database['public']['Tables']['held_invoices']['Row']
+export type GcashEntry      = Database['public']['Tables']['gcash_log']['Row']
+export type PosSession      = Database['public']['Tables']['pos_sessions']['Row']
 
-// Cart types (client-side only)
+// ─── Cart types ─────────────────────────────────────────────
+
 export interface CartItem {
   product: Product
   qty: number
   subtotal: number
   net_profit: number
+  /** If set, overrides product.price for this line (custom/canteen pricing) */
+  customPrice?: number
 }
 
 export interface CartState {
