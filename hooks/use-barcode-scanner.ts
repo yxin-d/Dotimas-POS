@@ -11,7 +11,7 @@ import { useEffect, useRef } from 'react'
  */
 export function useBarcodeScanner(onScan: (barcode: string) => void) {
   const bufferRef  = useRef('')
-  const lastKeyRef = useRef(Date.now())
+  const lastKeyRef = useRef<number | null>(null)
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -20,7 +20,7 @@ export function useBarcodeScanner(onScan: (barcode: string) => void) {
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
 
       const now = Date.now()
-      const gap = now - lastKeyRef.current
+      const gap = lastKeyRef.current === null ? Infinity : now - lastKeyRef.current
       lastKeyRef.current = now
 
       // Scanners type chars < 50ms apart; humans are slower

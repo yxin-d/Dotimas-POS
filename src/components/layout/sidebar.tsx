@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, ShoppingCart, Package,
-  Users, Receipt, Wallet, LogOut
+  Users, Receipt, Wallet, LogOut, Store
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -22,16 +22,20 @@ export default function Sidebar() {
   const router   = useRouter()
 
   async function handleSignOut() {
-    const supabase = createClient({})
+    const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/login')
+    router.refresh()
   }
 
   return (
-    <aside className="w-56 bg-white border-r flex flex-col">
+    <aside className="w-56 bg-surface border-r border-border flex flex-col shrink-0">
       {/* Logo */}
-      <div className="px-4 py-5 border-b">
-        <span className="font-bold text-gray-900 text-lg">POS System</span>
+      <div className="flex items-center gap-2.5 px-4 py-5 border-b border-border">
+        <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center shrink-0">
+          <Store size={16} className="text-white" strokeWidth={1.75} />
+        </div>
+        <span className="font-bold text-ink text-sm leading-tight">Tindahan<br/>POS</span>
       </div>
 
       {/* Nav */}
@@ -42,13 +46,16 @@ export default function Sidebar() {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+              className={`relative flex items-center gap-3 pl-3.5 pr-3 py-2 rounded-lg text-sm font-medium transition-colors
                 ${active
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  ? 'bg-primary-soft text-primary-dark'
+                  : 'text-ink-soft hover:bg-surface-sunken hover:text-ink'
                 }`}
             >
-              <Icon size={16} />
+              {active && (
+                <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-primary" />
+              )}
+              <Icon size={16} strokeWidth={1.75} />
               {label}
             </Link>
           )
@@ -59,9 +66,9 @@ export default function Sidebar() {
       <div className="px-2 pb-4">
         <button
           onClick={handleSignOut}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors w-full"
+          className="flex items-center gap-3 pl-3.5 pr-3 py-2 rounded-lg text-sm font-medium text-ink-faint hover:text-danger hover:bg-danger-soft transition-colors w-full"
         >
-          <LogOut size={16} />
+          <LogOut size={16} strokeWidth={1.75} />
           Sign out
         </button>
       </div>

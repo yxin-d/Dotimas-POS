@@ -37,7 +37,7 @@ export default function Receipt({ invoiceId, onClose }: Props) {
       ])
 
       if (invoiceRes.data && linesRes.data) {
-        setData({ invoice: invoiceRes.data as any, lines: linesRes.data })
+        setData({ invoice: invoiceRes.data as ReceiptData['invoice'], lines: linesRes.data })
       }
       setLoading(false)
     }
@@ -46,8 +46,8 @@ export default function Receipt({ invoiceId, onClose }: Props) {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div className="bg-white rounded-2xl p-8 text-sm text-gray-500">Loading receipt…</div>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40">
+        <div className="bg-surface rounded-2xl p-8 text-sm text-ink-faint">Loading receipt…</div>
       </div>
     )
   }
@@ -60,21 +60,21 @@ export default function Receipt({ invoiceId, onClose }: Props) {
   return (
     <>
       {/* Screen overlay */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm no-print">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs mx-4 overflow-hidden">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-sm no-print">
+        <div className="bg-surface rounded-2xl shadow-xl w-full max-w-xs mx-4 overflow-hidden">
 
           {/* Actions */}
-          <div className="flex items-center justify-between px-4 py-3 border-b no-print">
-            <span className="text-sm font-semibold text-gray-700">Sale complete</span>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border no-print">
+            <span className="text-sm font-semibold text-ink">Sale complete</span>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => window.print()}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-medium text-gray-700 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-sunken hover:bg-border rounded-lg text-xs font-medium text-ink-soft transition-colors"
               >
                 <Printer size={13} />
                 Print
               </button>
-              <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <button onClick={onClose} className="text-ink-faint hover:text-ink">
                 <X size={18} />
               </button>
             </div>
@@ -94,7 +94,7 @@ export default function Receipt({ invoiceId, onClose }: Props) {
 }
 
 function ReceiptBody({ invoice, lines, receiptNo }: {
-  invoice: any; lines: SaleLine[]; receiptNo: string
+  invoice: ReceiptData['invoice']; lines: SaleLine[]; receiptNo: string
 }) {
   return (
     <div className="px-4 py-4 font-mono text-xs text-gray-800 receipt-content" style={{ fontFamily: 'monospace', fontSize: '12px' }}>
@@ -148,7 +148,7 @@ function ReceiptBody({ invoice, lines, receiptNo }: {
       </div>
 
       {invoice.is_credit ? (
-        <div className="flex justify-between text-orange-600">
+        <div className="flex justify-between text-gold">
           <span>CREDIT (utang)</span>
           <span>{formatPeso(invoice.total_amount)}</span>
         </div>

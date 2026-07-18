@@ -4,6 +4,7 @@ import { useCart } from '@/hooks/use-cart'
 import { formatPeso } from '@/lib/utils/currency'
 import { ShoppingCart, Trash2 } from 'lucide-react'
 import CartItem from './cart-item'
+import Button from '@/src/components/ui/button'
 
 interface Props {
   onCheckout: () => void
@@ -13,15 +14,15 @@ export default function Cart({ onCheckout }: Props) {
   const { items, clearCart, total, itemCount, customer } = useCart()
 
   return (
-    <div className="w-80 shrink-0 flex flex-col bg-white border-l h-full">
+    <div className="w-80 shrink-0 flex flex-col bg-surface border-l border-border h-full">
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
-          <ShoppingCart size={16} className="text-gray-500" />
-          <span className="font-semibold text-gray-800 text-sm">Cart</span>
+          <ShoppingCart size={16} className="text-ink-faint" />
+          <span className="font-semibold text-ink text-sm">Cart</span>
           {itemCount() > 0 && (
-            <span className="text-xs bg-blue-600 text-white rounded-full px-1.5 py-0.5 font-medium">
+            <span className="text-xs bg-primary text-white rounded-full px-1.5 py-0.5 font-medium tabular">
               {itemCount()}
             </span>
           )}
@@ -29,7 +30,7 @@ export default function Cart({ onCheckout }: Props) {
         {items.length > 0 && (
           <button
             onClick={clearCart}
-            className="text-gray-400 hover:text-red-500 transition-colors"
+            className="text-ink-faint hover:text-danger transition-colors"
             title="Clear cart"
           >
             <Trash2 size={14} />
@@ -39,10 +40,10 @@ export default function Cart({ onCheckout }: Props) {
 
       {/* Customer */}
       {customer && (
-        <div className="px-4 py-2 bg-blue-50 border-b text-xs text-blue-700">
+        <div className="px-4 py-2 bg-primary-soft border-b border-border text-xs text-primary-dark">
           <span className="font-medium">{customer.name}</span>
           {customer.credit_balance > 0 && (
-            <span className="ml-2 text-orange-600">
+            <span className="ml-2 text-gold tabular">
               Utang: {formatPeso(customer.credit_balance)}
             </span>
           )}
@@ -52,7 +53,7 @@ export default function Cart({ onCheckout }: Props) {
       {/* Items */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-gray-300 gap-2">
+          <div className="flex flex-col items-center justify-center h-40 text-ink-faint/50 gap-2">
             <ShoppingCart size={32} strokeWidth={1.5} />
             <p className="text-xs">Cart is empty</p>
           </div>
@@ -64,20 +65,19 @@ export default function Cart({ onCheckout }: Props) {
       </div>
 
       {/* Footer */}
-      <div className="border-t px-4 py-4 space-y-3">
+      <div className="border-t border-border px-4 py-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-500">Total</span>
-          <span className="text-xl font-bold text-gray-900">{formatPeso(total())}</span>
+          <span className="text-sm text-ink-faint">Total</span>
+          <span className="text-xl font-bold text-ink tabular">{formatPeso(total())}</span>
         </div>
-        <button
+        <Button
           onClick={onCheckout}
           disabled={items.length === 0}
-          className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold
-            hover:bg-blue-700 active:scale-95 transition-all
-            disabled:opacity-40 disabled:cursor-not-allowed"
+          size="lg"
+          className="w-full"
         >
           Checkout
-        </button>
+        </Button>
       </div>
     </div>
   )
