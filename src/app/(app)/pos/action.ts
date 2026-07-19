@@ -2,7 +2,6 @@
 
 import { createClient } from '@/lib/supabase/server'
 import type { CartItem, Customer, PaymentMethod } from '@/types/database'
-import { useRef } from 'react'
 
 // Prefix used by use-cart for ad-hoc/canteen items
 const CUSTOM_ITEM_PREFIX = '__custom__'
@@ -16,13 +15,14 @@ interface CheckoutPayload {
 }
 
 export async function completeSale(payload: CheckoutPayload) {
-  const supabaseRef = useRef<any>(null)
+  // ✅ Create the client directly here
+  const supabase = await createClient()
 
   const total  = payload.items.reduce((s, i) => s + i.subtotal, 0)
   const change = payload.isCredit ? 0 : Math.max(0, payload.amountReceived - total)
 
   // 1. Create invoice header
-  const { data: invoice, error: invoiceError } = await supabaseRef.current
+  const { data: invoice, error: invoiceError } = await supabase
     .from('sale_invoice')
     .insert({
       customer_id:     payload.customer?.id ?? null,
@@ -37,8 +37,6 @@ export async function completeSale(payload: CheckoutPayload) {
   if (invoiceError) throw new Error(`Invoice error: ${invoiceError.message}`)
 
   // 2. Insert line items
-  // Custom/canteen items have a fake product_id (prefixed with __custom__).
-  // We pass null for product_id on those so the UUID FK is not violated.
   const lineItems = payload.items.map(item => {
     const isCustom = item.product.id.startsWith(CUSTOM_ITEM_PREFIX)
     return {
@@ -53,18 +51,25 @@ export async function completeSale(payload: CheckoutPayload) {
     }
   })
 
-  const { error: linesError } = await supabaseRef.current.from('sales').insert(lineItems)
+  const { error: linesError } = await supabase.from('sales').insert(lineItems)
   if (linesError) throw new Error(`Line items error: ${linesError.message}`)
 
-  // 3. Custom items don't deduct stock (no DB product), so the trigger
-  //    runs only for rows where product_id is not null — no extra handling needed.
-
-  // 4. If credit sale, create ledger entry
+  // 3. If credit sale, create ledger entry
   if (payload.isCredit && payload.customer) {
-    const currentBalance = payload.customer.credit_balance ?? 0
+    // ⚠️ IMPORTANT: NEVER trust client-provided credit_balance!
+    // Fetch the current balance directly from the database.
+    const { data: cust, error: custError } = await supabase
+      .from('customers')
+      .select('credit_balance')
+      .eq('id', payload.customer.id)
+      .single()
+
+    if (custError) throw new Error(`Customer fetch error: ${custError.message}`)
+
+    const currentBalance = cust?.credit_balance ?? 0
     const newBalance     = currentBalance + total
 
-    const { error: ledgerError } = await supabaseRef.current.from('ledger').insert({
+    const { error: ledgerError } = await supabase.from('ledger').insert({
       customer_id:     payload.customer.id,
       invoice_id:      invoice.id,
       entry_type:      'credit_given',
