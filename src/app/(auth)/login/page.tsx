@@ -44,7 +44,7 @@ export default function LoginPage() {
           <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center mb-3">
             <Store size={22} className="text-white" strokeWidth={1.75} />
           </div>
-          <h1 className="text-lg font-bold text-ink">Tindahan POS</h1>
+          <h1 className="text-lg font-bold text-ink">Dotimas</h1>
           <p className="text-xs text-ink-faint mt-1">Sign in to open the till</p>
         </div>
 
