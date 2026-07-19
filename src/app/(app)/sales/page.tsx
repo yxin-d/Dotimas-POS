@@ -1,358 +1,202 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { createClient }  from '@/lib/supabase/client';
-import { toast } from 'sonner';
-import type { Product, Customer } from '@/types/database';
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { formatPeso, formatDate, todayPH } from '@/lib/utils/currency'
+import { Search, ChevronDown, ChevronUp, Receipt } from 'lucide-react'
 
-type CustomerOption = Pick<Customer, 'id' | 'name' | 'loyalty_pts' | 'credit_balance'>;
+interface InvoiceRow {
+  id: string
+  created_at: string
+  total_amount: number
+  amount_received: number
+  change: number
+  payment_method: string
+  is_credit: boolean
+  customers: { name: string } | null
+}
 
-const supabase = createClient();
+interface SaleLine {
+  id: string
+  product_name: string
+  qty: number
+  unit_price: number
+  subtotal: number
+}
 
-type CartItem = {
-  product_id: string;
-  product_name: string;
-  qty: number;
-  unit_price: number;
-  unit_cost: number;
-  subtotal: number;
-};
+const supabase = createClient()
 
 export default function SalesPage() {
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [products, setProducts] = useState<Product[]>([]);
-  const [customers, setCustomers] = useState<CustomerOption[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [amountReceived, setAmountReceived] = useState('');
-  const [isCredit, setIsCredit] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [invoices, setInvoices]     = useState<InvoiceRow[]>([])
+  const [expanded, setExpanded]     = useState<string | null>(null)
+  const [lines, setLines]           = useState<Record<string, SaleLine[]>>({})
+  const [loading, setLoading]       = useState(true)
+  const [dateFrom, setDateFrom]     = useState(todayPH())
+  const [dateTo, setDateTo]         = useState(todayPH())
+  const [search, setSearch]         = useState('')
 
-  // Load products for search
   useEffect(() => {
-    const fetchProducts = async () => {
-      if (searchTerm.length > 1) {
-        const { data } = await supabase
-          .from('products')
-          .select('*')
-          .or(`name.ilike.%${searchTerm}%,barcode.ilike.%${searchTerm}%`)
-          .eq('is_active', true)
-          .limit(10);
-        if (data) setProducts(data);
-      } else {
-        setProducts([]);
-      }
-    };
-    fetchProducts();
-  }, [searchTerm]);
+    setLoading(true)
+    let query = supabase
+      .from('sale_invoice')
+      .select('*, customers(name)')
+      .gte('created_at', `${dateFrom}T00:00:00`)
+      .lte('created_at', `${dateTo}T23:59:59`)
+      .order('created_at', { ascending: false })
 
-  // Load customers for dropdown
-  useEffect(() => {
-    const fetchCustomers = async () => {
-      const { data } = await supabase.from('customers').select('id, name, loyalty_pts, credit_balance').order('name');
-      if (data) setCustomers(data);
-    };
-    fetchCustomers();
-  }, []);
+    query.then(({ data }) => {
+      setInvoices((data ?? []) as InvoiceRow[])
+      setLoading(false)
+    })
+  }, [dateFrom, dateTo])
 
-  const addToCart = (product: Product) => {
-    setCart((prev) => {
-      const existing = prev.find((item) => item.product_id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.product_id === product.id
-            ? { ...item, qty: item.qty + 1, subtotal: (item.qty + 1) * item.unit_price }
-            : item
-        );
-      }
-      return [
-        ...prev,
-        {
-          product_id: product.id,
-          product_name: product.name,
-          qty: 1,
-          unit_price: product.price,
-          unit_cost: product.cost || 0,
-          subtotal: product.price,
-        },
-      ];
-    });
-    setSearchTerm('');
-    setProducts([]);
-  };
-
-  const updateQty = (index: number, newQty: number) => {
-    if (newQty <= 0) {
-      setCart((prev) => prev.filter((_, i) => i !== index));
-      return;
+  async function toggleExpand(invoiceId: string) {
+    if (expanded === invoiceId) { setExpanded(null); return }
+    setExpanded(invoiceId)
+    if (!lines[invoiceId]) {
+      const { data } = await supabase
+        .from('sales')
+        .select('*')
+        .eq('invoice_id', invoiceId)
+      setLines(prev => ({ ...prev, [invoiceId]: data ?? [] }))
     }
-    setCart((prev) =>
-      prev.map((item, i) =>
-        i === index ? { ...item, qty: newQty, subtotal: newQty * item.unit_price } : item
+  }
+
+  // Client-side filter by customer name or invoice ID
+  const filtered = search.trim()
+    ? invoices.filter(i =>
+        i.customers?.name.toLowerCase().includes(search.toLowerCase()) ||
+        i.id.toLowerCase().includes(search.toLowerCase())
       )
-    );
-  };
+    : invoices
 
-  const totalCartAmount = cart.reduce((sum, item) => sum + item.subtotal, 0);
-
-  const handleCheckout = async () => {
-    if (cart.length === 0) return toast.error('Cart is empty');
-
-    // 1. Validate payment if not credit
-    if (!isCredit) {
-      const received = parseFloat(amountReceived);
-      if (isNaN(received) || received < totalCartAmount) {
-        toast.error('Amount received is less than total bill.');
-        return;
-      }
-    }
-
-    setLoading(true);
-
-    try {
-      // 2. Insert Invoice
-      const { data: invoice, error: invError } = await supabase
-        .from('sale_invoice')
-        .insert({
-          customer_id: selectedCustomerId || null,
-          amount_received: isCredit ? 0 : parseFloat(amountReceived),
-          change: isCredit ? 0 : parseFloat(amountReceived) - totalCartAmount,
-          payment_method: isCredit ? 'cash' : paymentMethod,
-          is_credit: isCredit,
-          total_amount: totalCartAmount, // trigger will recalc anyway, but good to seed
-        })
-        .select('id')
-        .single();
-
-      if (invError) throw invError;
-      const invoiceId = invoice.id;
-
-      // 3. Insert Sales Line Items
-      const lineItems = cart.map((item) => ({
-        invoice_id: invoiceId,
-        product_id: item.product_id,
-        product_name: item.product_name,
-        qty: item.qty,
-        unit_price: item.unit_price,
-        unit_cost: item.unit_cost,
-        subtotal: item.subtotal,
-        net_profit: (item.unit_price - item.unit_cost) * item.qty,
-      }));
-
-      const { error: salesError } = await supabase.from('sales').insert(lineItems);
-      if (salesError) throw salesError;
-
-      // 4. If Credit, Insert Ledger Entry
-      if (isCredit && selectedCustomerId) {
-        // Get current balance
-        const { data: cust } = await supabase
-          .from('customers')
-          .select('credit_balance')
-          .eq('id', selectedCustomerId)
-          .single();
-
-        const currentBal = cust?.credit_balance || 0;
-        const newBal = currentBal + totalCartAmount;
-
-        const { error: ledgerError } = await supabase.from('ledger').insert({
-          customer_id: selectedCustomerId,
-          invoice_id: invoiceId,
-          entry_type: 'credit_given',
-          amount: totalCartAmount,
-          running_balance: newBal,
-          description: `Invoice ${invoiceId}`,
-        });
-        if (ledgerError) throw ledgerError;
-      }
-
-      // 5. If not Credit and customer selected, add loyalty points (e.g., 1 pt per 100 pesos)
-      if (!isCredit && selectedCustomerId) {
-        const ptsToAdd = Math.floor(totalCartAmount / 100);
-        if (ptsToAdd > 0) {
-          const { data: cust } = await supabase
-            .from('customers')
-            .select('loyalty_pts')
-            .eq('id', selectedCustomerId)
-            .single();
-          if (cust) {
-            await supabase
-              .from('customers')
-              .update({ loyalty_pts: (cust.loyalty_pts || 0) + ptsToAdd })
-              .eq('id', selectedCustomerId);
-          }
-        }
-      }
-
-      // Success!
-      toast.success(`Sale completed! Invoice #${invoiceId.slice(0, 8).toUpperCase()}`);
-      setCart([]);
-      setAmountReceived('');
-      setSelectedCustomerId('');
-      setIsCredit(false);
-    } catch (err) {
-      toast.error('Checkout failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const totalSales  = filtered.reduce((s, i) => s + i.total_amount, 0)
+  const creditCount = filtered.filter(i => i.is_credit).length
 
   return (
-    <div className="p-4 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Left: Product Search & Cart */}
-      <div className="lg:col-span-2 space-y-4">
-        <h1 className="text-2xl font-bold text-ink">Point of sale (manual entry)</h1>
+    <div className="p-6 max-w-5xl mx-auto">
 
-        {/* Search */}
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search product by name or scan barcode..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-surface border border-border rounded-xl px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-            autoFocus
-          />
-          {products.length > 0 && (
-            <div className="absolute z-10 bg-surface border border-border rounded-xl shadow-lg w-full max-h-60 overflow-y-auto">
-              {products.map((p) => (
-                <div
-                  key={p.id}
-                  onClick={() => addToCart(p)}
-                  className="p-3 hover:bg-surface-sunken cursor-pointer border-b border-border flex justify-between transition-colors"
-                >
-                  <span>{p.name}</span>
-                  <span className="font-bold text-primary tabular">₱{p.price} (Stock: {p.stocks})</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Cart Table */}
-        <div className="bg-surface rounded-2xl border border-border overflow-hidden">
-          <table className="w-full text-left">
-            <thead className="bg-surface-sunken">
-              <tr>
-                <th className="px-4 py-3 text-xs font-semibold text-ink-soft uppercase tracking-wide">Product</th>
-                <th className="px-4 py-3 text-xs font-semibold text-ink-soft uppercase tracking-wide text-center">Qty</th>
-                <th className="px-4 py-3 text-xs font-semibold text-ink-soft uppercase tracking-wide text-right">Price</th>
-                <th className="px-4 py-3 text-xs font-semibold text-ink-soft uppercase tracking-wide text-right">Subtotal</th>
-                <th className="px-4 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {cart.map((item, idx) => (
-                <tr key={idx} className="border-b border-border">
-                  <td className="px-4 py-3 text-sm text-ink">{item.product_name}</td>
-                  <td className="px-4 py-2">
-                    <input
-                      type="number"
-                      min="1"
-                      value={item.qty}
-                      onChange={(e) => updateQty(idx, parseInt(e.target.value) || 0)}
-                      className="w-16 border border-border rounded-lg px-2 py-1 text-center tabular focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right tabular text-ink-soft">₱{item.unit_price.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-sm text-right font-bold tabular text-ink">₱{item.subtotal.toFixed(2)}</td>
-                  <td className="px-4 py-2">
-                    <button onClick={() => setCart((prev) => prev.filter((_, i) => i !== idx))} className="text-danger text-sm font-medium hover:underline">
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {cart.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-sm text-ink-faint">Cart is empty</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-ink">Sales history</h1>
+          <p className="text-xs text-ink-faint mt-0.5">{filtered.length} invoices · {formatPeso(totalSales)} total</p>
         </div>
       </div>
 
-      {/* Right: Checkout Panel */}
-      <div className="space-y-4">
-        <div className="bg-surface p-5 rounded-2xl border border-border">
-          <h2 className="text-lg font-bold text-ink">Checkout</h2>
-          <div className="mt-4 space-y-3">
-            <div>
-              <label className="block text-xs font-semibold text-ink-soft mb-1.5">Customer</label>
-              <select
-                value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
-                className="w-full bg-surface border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-              >
-                <option value="">Walk-in (No customer)</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} (Pts: {c.loyalty_pts}) {c.credit_balance > 0 ? `| Utang: ₱${c.credit_balance}` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 mb-5">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-ink-soft">From</label>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            className="border border-border rounded-xl px-3 py-2 text-sm text-ink bg-surface
+              focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-ink-soft">To</label>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            className="border border-border rounded-xl px-3 py-2 text-sm text-ink bg-surface
+              focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
+        </div>
+        <div className="relative flex-1 min-w-[160px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+          <input type="text" placeholder="Search customer or invoice ID…" value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 border border-border rounded-xl text-sm bg-surface
+              focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
+        </div>
+      </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-ink-soft mb-1.5">Payment type</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                disabled={isCredit}
-                className="w-full bg-surface border border-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:bg-surface-sunken"
-              >
-                <option value="cash">Cash</option>
-                <option value="gcash">GCash</option>
-                <option value="maya">Maya</option>
-                <option value="mixed">Mixed</option>
-              </select>
-            </div>
+      {/* Summary chips */}
+      {!loading && (
+        <div className="flex gap-3 mb-5">
+          <Chip label="Total sales" value={formatPeso(totalSales)} />
+          <Chip label="Transactions" value={String(filtered.length)} />
+          {creditCount > 0 && <Chip label="On credit" value={String(creditCount)} accent />}
+        </div>
+      )}
 
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="isCredit"
-                checked={isCredit}
-                onChange={(e) => setIsCredit(e.target.checked)}
-              />
-              <label htmlFor="isCredit" className="text-sm font-medium text-gold">
-                This is a Credit Sale (Utang)
-              </label>
-            </div>
+      {/* Invoice list */}
+      <div className="bg-surface rounded-2xl border border-border overflow-hidden">
+        {loading ? (
+          <div className="py-12 text-center text-sm text-ink-faint">Loading…</div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center">
+            <Receipt size={28} className="mx-auto text-ink-faint/40 mb-2" />
+            <p className="text-sm text-ink-faint">No sales for this period</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {filtered.map(inv => (
+              <div key={inv.id}>
+                {/* Invoice row */}
+                <button
+                  onClick={() => toggleExpand(inv.id)}
+                  className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-surface-sunken/60 transition-colors text-left"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-xs tabular font-mono text-ink-faint">
+                        #{inv.id.slice(0, 8).toUpperCase()}
+                      </span>
+                      {inv.is_credit && (
+                        <span className="text-[10px] font-bold bg-gold-soft text-gold px-1.5 py-0.5 rounded-full">
+                          UTANG
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full uppercase
+                        ${inv.payment_method === 'cash' ? 'bg-surface-sunken text-ink-soft' :
+                          inv.payment_method === 'gcash' ? 'bg-primary-soft text-primary' :
+                          'bg-surface-sunken text-ink-soft'}`}
+                      >
+                        {inv.payment_method}
+                      </span>
+                    </div>
+                    <p className="text-xs text-ink-faint">
+                      {formatDate(inv.created_at, true)}
+                      {inv.customers?.name && ` · ${inv.customers.name}`}
+                    </p>
+                  </div>
+                  <span className="tabular font-bold text-ink text-sm shrink-0">
+                    {formatPeso(inv.total_amount)}
+                  </span>
+                  {expanded === inv.id ? <ChevronUp size={14} className="text-ink-faint shrink-0" /> : <ChevronDown size={14} className="text-ink-faint shrink-0" />}
+                </button>
 
-            <div>
-              <label className="block text-xs font-semibold text-ink-soft mb-1">Total</label>
-              <p className="text-3xl font-bold text-primary tabular">₱{totalCartAmount.toFixed(2)}</p>
-            </div>
-
-            {!isCredit && (
-              <div>
-                <label className="block text-xs font-semibold text-ink-soft mb-1.5">Amount received</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="Enter cash received"
-                  value={amountReceived}
-                  onChange={(e) => setAmountReceived(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-xl px-3 py-2.5 text-sm tabular focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                />
-                {amountReceived && parseFloat(amountReceived) > totalCartAmount && (
-                  <p className="text-primary text-sm mt-1 tabular">Change: ₱{(parseFloat(amountReceived) - totalCartAmount).toFixed(2)}</p>
+                {/* Expanded line items */}
+                {expanded === inv.id && (
+                  <div className="px-5 pb-3 bg-surface-sunken/40 border-t border-border">
+                    <div className="pt-3 space-y-1">
+                      {(lines[inv.id] ?? []).map(line => (
+                        <div key={line.id} className="flex justify-between text-sm">
+                          <span className="text-ink-soft">{line.product_name} × {line.qty}</span>
+                          <span className="tabular text-ink">{formatPeso(line.subtotal)}</span>
+                        </div>
+                      ))}
+                      {!lines[inv.id] && (
+                        <p className="text-xs text-ink-faint">Loading items…</p>
+                      )}
+                    </div>
+                    {!inv.is_credit && (
+                      <div className="mt-2 pt-2 border-t border-border flex justify-between text-xs text-ink-faint">
+                        <span>Received: {formatPeso(inv.amount_received)} · Change: {formatPeso(inv.change)}</span>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-
-            <button
-              onClick={handleCheckout}
-              disabled={loading || cart.length === 0}
-              className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary-dark transition-colors disabled:bg-ink-faint disabled:cursor-not-allowed"
-            >
-              {loading ? 'Processing…' : isCredit ? 'Create credit invoice' : 'Complete sale'}
-            </button>
+            ))}
           </div>
-        </div>
+        )}
       </div>
     </div>
-  );
+  )
+}
+
+function Chip({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className={`px-3 py-2 rounded-xl border text-sm ${accent ? 'bg-gold-soft border-gold/20' : 'bg-surface border-border'}`}>
+      <span className="text-ink-faint text-xs">{label} </span>
+      <span className={`font-bold tabular ${accent ? 'text-gold' : 'text-ink'}`}>{value}</span>
+    </div>
+  )
 }
