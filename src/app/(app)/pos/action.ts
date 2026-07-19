@@ -15,8 +15,7 @@ interface CheckoutPayload {
 }
 
 export async function completeSale(payload: CheckoutPayload) {
-  // ✅ Create the client directly here
-  const supabase = await createClient()
+  const supabase = await createClient()  // ✅ No refs, just create the client
 
   const total  = payload.items.reduce((s, i) => s + i.subtotal, 0)
   const change = payload.isCredit ? 0 : Math.max(0, payload.amountReceived - total)
@@ -54,10 +53,8 @@ export async function completeSale(payload: CheckoutPayload) {
   const { error: linesError } = await supabase.from('sales').insert(lineItems)
   if (linesError) throw new Error(`Line items error: ${linesError.message}`)
 
-  // 3. If credit sale, create ledger entry
+  // 3. If credit sale, create ledger entry (with proper balance fetch)
   if (payload.isCredit && payload.customer) {
-    // ⚠️ IMPORTANT: NEVER trust client-provided credit_balance!
-    // Fetch the current balance directly from the database.
     const { data: cust, error: custError } = await supabase
       .from('customers')
       .select('credit_balance')
