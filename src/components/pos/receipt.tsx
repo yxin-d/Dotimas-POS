@@ -17,25 +17,16 @@ interface ReceiptData {
 }
 
 export default function Receipt({ invoiceId, onClose }: Props) {
-  const [data, setData]     = useState<ReceiptData | null>(null)
+  const [data, setData]       = useState<ReceiptData | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
       const supabase = createClient()
-
       const [invoiceRes, linesRes] = await Promise.all([
-        supabase
-          .from('sale_invoice')
-          .select('*, customers(name)')
-          .eq('id', invoiceId)
-          .single(),
-        supabase
-          .from('sales')
-          .select('*')
-          .eq('invoice_id', invoiceId),
+        supabase.from('sale_invoice').select('*, customers(name)').eq('id', invoiceId).single(),
+        supabase.from('sales').select('*').eq('invoice_id', invoiceId),
       ])
-
       if (invoiceRes.data && linesRes.data) {
         setData({ invoice: invoiceRes.data as ReceiptData['invoice'], lines: linesRes.data })
       }
@@ -59,12 +50,15 @@ export default function Receipt({ invoiceId, onClose }: Props) {
 
   return (
     <>
-      {/* Screen overlay */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-sm no-print">
+      {/*
+        Screen modal — hidden when printing via the print CSS rule
+        that targets [data-print-hide]. We avoid Tailwind's .no-print
+        because its specificity can be overridden unpredictably.
+      */}
+      <div data-print-hide className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 backdrop-blur-sm">
         <div className="bg-surface rounded-2xl shadow-xl w-full max-w-xs mx-4 overflow-hidden">
 
-          {/* Actions */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border no-print">
+          <div data-print-hide className="flex items-center justify-between px-4 py-3 border-b border-border">
             <span className="text-sm font-semibold text-ink">Sale complete</span>
             <div className="flex items-center gap-2">
               <button
@@ -80,97 +74,106 @@ export default function Receipt({ invoiceId, onClose }: Props) {
             </div>
           </div>
 
-          {/* Receipt body */}
-          <ReceiptBody invoice={invoice} lines={lines} receiptNo={receiptNo} />
+          {/* Receipt preview inside the modal */}
+          <div className="px-4 py-4 max-h-[70vh] overflow-y-auto">
+            <ReceiptContent invoice={invoice} lines={lines} receiptNo={receiptNo} />
+          </div>
         </div>
       </div>
 
-      {/* Print-only version — full width, no modal chrome */}
-      <div className="receipt-only hidden">
-        <ReceiptBody invoice={invoice} lines={lines} receiptNo={receiptNo} />
+      {/*
+        Print target — always in the DOM so window.print() finds it.
+        Uses inline style NOT Tailwind classes to avoid specificity fights.
+        The @media print CSS in globals.css hides everything else and
+        shows only [data-print-receipt].
+      */}
+      <div data-print-receipt style={{ display: 'none' }}>
+        <ReceiptContent invoice={invoice} lines={lines} receiptNo={receiptNo} />
       </div>
     </>
   )
 }
 
-function ReceiptBody({ invoice, lines, receiptNo }: {
-  invoice: ReceiptData['invoice']; lines: SaleLine[]; receiptNo: string
+function ReceiptContent({ invoice, lines, receiptNo }: {
+  invoice: ReceiptData['invoice']
+  lines: SaleLine[]
+  receiptNo: string
 }) {
   return (
-    <div className="px-4 py-4 font-mono text-xs text-gray-800 receipt-content" style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+    <div style={{ fontFamily: "'Courier New', monospace", fontSize: '12px', lineHeight: '1.5', color: '#000' }}>
 
       {/* Store header */}
-      <div className="text-center mb-3">
-        <p className="font-bold text-sm">STORE NAME</p>
-        <p className="text-gray-500">123 Sample St, Brgy. Sample</p>
-        <p className="text-gray-500">Tel: 09XX-XXX-XXXX</p>
+      <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+        <p style={{ fontWeight: 'bold', fontSize: '14px' }}>DOTIMAS STORE</p>
+        <p style={{ color: '#555' }}>Cauringan, Sison, Pangasinan</p>
+        <p style={{ color: '#555' }}>0954-099-6331</p>
       </div>
 
-      <div className="border-t border-dashed border-gray-300 my-2" />
+      <p style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
 
       {/* Meta */}
-      <div className="flex justify-between mb-1">
-        <span className="text-gray-500">No:</span>
-        <span className="font-bold">{receiptNo}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+        <span style={{ color: '#555' }}>No:</span>
+        <span style={{ fontWeight: 'bold' }}>{receiptNo}</span>
       </div>
-      <div className="flex justify-between mb-1">
-        <span className="text-gray-500">Date:</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+        <span style={{ color: '#555' }}>Date:</span>
         <span>{formatDate(invoice.created_at, true)}</span>
       </div>
       {invoice.customers?.name && (
-        <div className="flex justify-between mb-1">
-          <span className="text-gray-500">Customer:</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+          <span style={{ color: '#555' }}>Customer:</span>
           <span>{invoice.customers.name}</span>
         </div>
       )}
 
-      <div className="border-t border-dashed border-gray-300 my-2" />
+      <p style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
 
       {/* Line items */}
       {lines.map(line => (
-        <div key={line.id} className="mb-1">
-          <div className="flex justify-between">
-            <span className="flex-1 truncate pr-2">{line.product_name}</span>
-            <span>{formatPeso(line.subtotal)}</span>
+        <div key={line.id} style={{ marginBottom: '4px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ flex: 1, overflow: 'hidden', paddingRight: '4px' }}>{line.product_name}</span>
+            <span style={{ whiteSpace: 'nowrap' }}>{formatPeso(line.subtotal)}</span>
           </div>
-          <div className="text-gray-400 pl-1">
+          <div style={{ color: '#777', paddingLeft: '4px' }}>
             {line.qty} × {formatPeso(line.unit_price)}
           </div>
         </div>
       ))}
 
-      <div className="border-t border-dashed border-gray-300 my-2" />
+      <p style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
 
       {/* Totals */}
-      <div className="flex justify-between font-bold mb-1">
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', marginBottom: '2px' }}>
         <span>TOTAL</span>
         <span>{formatPeso(invoice.total_amount)}</span>
       </div>
 
       {invoice.is_credit ? (
-        <div className="flex justify-between text-gold">
+        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8a6200' }}>
           <span>CREDIT (utang)</span>
           <span>{formatPeso(invoice.total_amount)}</span>
         </div>
       ) : (
         <>
-          <div className="flex justify-between text-gray-600">
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
             <span>Cash</span>
             <span>{formatPeso(invoice.amount_received)}</span>
           </div>
-          <div className="flex justify-between text-gray-600">
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
             <span>Change</span>
             <span>{formatPeso(invoice.change)}</span>
           </div>
         </>
       )}
 
-      <div className="border-t border-dashed border-gray-300 my-2" />
+      <p style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
 
-      <p className="text-center text-gray-500 text-[10px]">
+      <p style={{ textAlign: 'center', color: '#555', fontSize: '10px' }}>
         {invoice.is_credit ? 'Credited to account. Thank you!' : 'Thank you! Come again!'}
       </p>
-      <p className="text-center text-gray-400 text-[10px] mt-1">
+      <p style={{ textAlign: 'center', color: '#777', fontSize: '10px', marginTop: '2px' }}>
         Payment: {invoice.payment_method.toUpperCase()}
       </p>
     </div>

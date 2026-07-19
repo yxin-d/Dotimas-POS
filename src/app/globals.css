@@ -113,35 +113,36 @@ body {
 */
 
 @media print {
-  /* Hide everything except the receipt */
-  body > * { display: none !important; }
-  .receipt-only { display: block !important; }
+  /* Hide the entire page UI */
+  body > * {
+    display: none !important;
+  }
 
-  /* Receipt sizing for 80mm thermal paper */
+  /* Hide the modal overlay inside the receipt component */
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  /* Show only the receipt content */
+  [data-print-receipt] {
+    display: block !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 72mm;
+    padding: 4mm;
+    background: white !important;
+    color: #000 !important;
+  }
+
   @page {
     size: 80mm auto;
     margin: 0;
   }
 
-  .receipt-only {
-    width: 72mm;           /* 80mm paper minus ~8mm margins */
-    padding: 4mm;
-    font-family: 'Courier New', monospace;
-    font-size: 11px;
-    line-height: 1.4;
-    color: #000;
-  }
-
-  .receipt-content {
-    width: 100%;
-  }
-
-  /* No backgrounds, no shadows in print */
+  /* Strip all decoration when printing */
   * {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
     box-shadow: none !important;
-    background: white !important;
-    color: #000 !important;
+    text-shadow: none !important;
   }
 }

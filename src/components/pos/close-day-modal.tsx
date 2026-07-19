@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatPeso, todayPH } from '@/lib/utils/currency'
 import { toast } from 'sonner'
-import { X, TrendingUp, CreditCard, Wallet, Smartphone, ReceiptText } from 'lucide-react'
+import { X, TrendingUp, CreditCard, Wallet, Smartphone, ReceiptText, CheckCircle } from 'lucide-react'
 
 interface Props {
   startingCash: number
   onClose: () => void
 }
 
-interface Summary {
+interface DaySummary {
   invoice_count: number
   gross_sales: number
   total_profit: number
@@ -20,43 +20,80 @@ interface Summary {
   cash_collected: number
 }
 
-interface ExpenseTotal {
-  total: number
-}
-
-interface GcashTotal {
-  received: number
-  sent: number
-}
-
 export default function CloseDayModal({ startingCash, onClose }: Props) {
-  const [summary, setSummary]         = useState<Summary | null>(null)
-  const [expenses, setExpenses]       = useState<ExpenseTotal>({ total: 0 })
-  const [gcash, setGcash]             = useState<GcashTotal>({ received: 0, sent: 0 })
+  const [summary, setSummary]         = useState<DaySummary | null>(null)
+  const [expenseTotal, setExpenseTotal] = useState(0)
+  const [gcashReceived, setGcashReceived] = useState(0)
+  const [gcashSent, setGcashSent]     = useState(0)
   const [closingCash, setClosingCash] = useState('')
   const [notes, setNotes]             = useState('')
-  const [saving, setSaving]           = useState(false)
   const [loading, setLoading]         = useState(true)
+  const [saving, setSaving]           = useState(false)
   const [closed, setClosed]           = useState(false)
 
-  const today = todayPH()
+  const today = todayPH()  // 'YYYY-MM-DD' in Asia/Manila
 
   useEffect(() => {
     async function load() {
       const supabase = createClient()
 
-      const [summaryRes, expensesRes, gcashRes] = await Promise.all([
-        supabase.from('daily_summary').select('*').eq('sale_date', today).single(),
-        supabase.from('expenses').select('amount').eq('expense_date', today),
-        supabase.from('gcash_log').select('direction, amount').eq('txn_date', today),
+      // Query using date range in Manila time to avoid timezone drift
+      const dayStart = `${today}T00:00:00+08:00`
+      const dayEnd   = `${today}T23:59:59+08:00`
+
+      const [invoiceRes, salesRes, expenseRes, gcashRes] = await Promise.all([
+        // Count and total of invoices for today
+        supabase
+          .from('sale_invoice')
+          .select('id, total_amount, is_credit, payment_method, amount_received, change')
+          .gte('created_at', dayStart)
+          .lte('created_at', dayEnd),
+
+        // Profit from line items for today's invoices
+        supabase
+          .from('sales')
+          .select('net_profit, sale_invoice!inner(created_at)')
+          .gte('sale_invoice.created_at', dayStart)
+          .lte('sale_invoice.created_at', dayEnd),
+
+        // Expenses logged today
+        supabase
+          .from('expenses')
+          .select('amount')
+          .eq('expense_date', today),
+
+        // GCash log entries today
+        supabase
+          .from('gcash_log')
+          .select('direction, amount')
+          .eq('txn_date', today),
       ])
 
-      if (summaryRes.data) setSummary(summaryRes.data as Summary)
+      const invoices = invoiceRes.data ?? []
+      const salesLines = salesRes.data ?? []
+      const expenses = expenseRes.data ?? []
+      const gcashEntries = gcashRes.data ?? []
 
-      const expTotal = (expensesRes.data ?? []).reduce((s, e) => s + e.amount, 0)
-      setExpenses({ total: expTotal })
+      const grossSales   = invoices.reduce((s, i) => s + i.total_amount, 0)
+      const creditGiven  = invoices.filter(i => i.is_credit).reduce((s, i) => s + i.total_amount, 0)
+      const gcashSales   = invoices.filter(i => i.payment_method === 'gcash').reduce((s, i) => s + i.total_amount, 0)
+      const cashCollected = invoices
+        .filter(i => i.payment_method === 'cash' && !i.is_credit)
+        .reduce((s, i) => s + (i.amount_received - i.change), 0)
+      const totalProfit  = salesLines.reduce((s: number, l: any) => s + (l.net_profit ?? 0), 0)
 
-      const gcashTotals = (gcashRes.data ?? []).reduce(
+      setSummary({
+        invoice_count:  invoices.length,
+        gross_sales:    grossSales,
+        total_profit:   totalProfit,
+        credit_given:   creditGiven,
+        gcash_sales:    gcashSales,
+        cash_collected: cashCollected,
+      })
+
+      setExpenseTotal(expenses.reduce((s, e) => s + e.amount, 0))
+
+      const { received, sent } = gcashEntries.reduce(
         (acc, g) => {
           if (g.direction === 'received') acc.received += g.amount
           else acc.sent += g.amount
@@ -64,13 +101,15 @@ export default function CloseDayModal({ startingCash, onClose }: Props) {
         },
         { received: 0, sent: 0 }
       )
-      setGcash(gcashTotals)
+      setGcashReceived(received)
+      setGcashSent(sent)
+
       setLoading(false)
     }
     load()
-  }, [])
+  }, [today])
 
-  const expectedCash = startingCash + (summary?.cash_collected ?? 0) - expenses.total
+  const expectedCash = startingCash + (summary?.cash_collected ?? 0) - expenseTotal
   const actualCash   = parseFloat(closingCash) || 0
   const variance     = actualCash - expectedCash
 
@@ -82,17 +121,23 @@ export default function CloseDayModal({ startingCash, onClose }: Props) {
       .from('pos_sessions')
       .update({
         closing_cash: actualCash || null,
-        notes:        notes || null,
+        notes:        notes.trim() || null,
         closed_at:    new Date().toISOString(),
       })
       .eq('session_date', today)
 
     if (error) {
-      toast.error(error.message)
-      setSaving(false)
-      return
+      // If session row doesn't exist yet (skip was pressed), upsert it
+      await supabase.from('pos_sessions').upsert({
+        session_date:  today,
+        starting_cash: startingCash,
+        closing_cash:  actualCash || null,
+        notes:         notes.trim() || null,
+        closed_at:     new Date().toISOString(),
+      }, { onConflict: 'session_date' })
     }
 
+    setSaving(false)
     setClosed(true)
   }
 
@@ -101,16 +146,14 @@ export default function CloseDayModal({ startingCash, onClose }: Props) {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-sm">
         <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8 text-center">
           <div className="w-14 h-14 bg-success-soft rounded-full flex items-center justify-center mx-auto mb-4">
-            <ReceiptText size={28} className="text-success" />
+            <CheckCircle size={28} className="text-success" />
           </div>
           <h2 className="text-lg font-bold text-ink mb-1">Day closed!</h2>
           <p className="text-sm text-ink-soft">
             {formatPeso(summary?.gross_sales ?? 0)} in sales today. Magpahinga na!
           </p>
-          <button
-            onClick={onClose}
-            className="mt-6 w-full bg-primary text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-primary-dark transition-colors"
-          >
+          <button onClick={onClose}
+            className="mt-6 w-full bg-primary text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-primary-dark transition-colors">
             Done
           </button>
         </div>
@@ -133,61 +176,50 @@ export default function CloseDayModal({ startingCash, onClose }: Props) {
           </button>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
           {loading ? (
-            <div className="py-8 text-center text-sm text-ink-faint">Loading summary…</div>
+            <div className="py-12 text-center text-sm text-ink-faint">Loading today's data…</div>
           ) : (
             <>
-              {/* Sales summary */}
-              <section>
-                <p className="text-xs font-semibold text-ink-soft uppercase tracking-wide mb-2">Sales</p>
-                <div className="bg-surface-sunken rounded-xl divide-y divide-border">
-                  <Row icon={<ReceiptText size={14} className="text-ink-faint" />}
-                    label="Transactions" value={String(summary?.invoice_count ?? 0)} plain />
-                  <Row icon={<TrendingUp size={14} className="text-success" />}
-                    label="Gross sales" value={formatPeso(summary?.gross_sales)} />
-                  <Row icon={<TrendingUp size={14} className="text-success" />}
-                    label="Net profit" value={formatPeso(summary?.total_profit)} />
-                  <Row icon={<CreditCard size={14} className="text-gold" />}
-                    label="Credit given (utang)" value={formatPeso(summary?.credit_given)} accent="gold" />
-                </div>
-              </section>
+              {/* Sales */}
+              <Section title="Sales">
+                <Row icon={<ReceiptText size={14} />} label="Transactions" value={String(summary?.invoice_count ?? 0)} mono />
+                <Row icon={<TrendingUp size={14} className="text-success" />} label="Gross sales" value={formatPeso(summary?.gross_sales)} />
+                <Row icon={<TrendingUp size={14} className="text-success" />} label="Net profit (est.)" value={formatPeso(summary?.total_profit)} />
+                <Row icon={<CreditCard size={14} className="text-gold" />} label="On credit (utang)" value={formatPeso(summary?.credit_given)} accent="gold" />
+              </Section>
 
-              {/* Payments breakdown */}
-              <section>
-                <p className="text-xs font-semibold text-ink-soft uppercase tracking-wide mb-2">Payments</p>
-                <div className="bg-surface-sunken rounded-xl divide-y divide-border">
-                  <Row icon={<Wallet size={14} className="text-ink-faint" />}
-                    label="Cash collected" value={formatPeso(summary?.cash_collected)} />
-                  <Row icon={<Smartphone size={14} className="text-ink-faint" />}
-                    label="GCash (POS sales)" value={formatPeso(summary?.gcash_sales)} />
-                  <Row icon={<Smartphone size={14} className="text-ink-faint" />}
-                    label="GCash received (log)" value={formatPeso(gcash.received)} />
-                  <Row icon={<Smartphone size={14} className="text-ink-faint" />}
-                    label="GCash sent (log)" value={formatPeso(gcash.sent)} accent="danger" />
-                </div>
-              </section>
+              {/* Payments */}
+              <Section title="Payments">
+                <Row icon={<Wallet size={14} />} label="Cash collected" value={formatPeso(summary?.cash_collected)} />
+                <Row icon={<Smartphone size={14} />} label="GCash (POS sales)" value={formatPeso(summary?.gcash_sales)} />
+                {gcashReceived > 0 && (
+                  <Row icon={<Smartphone size={14} />} label="GCash received (log)" value={formatPeso(gcashReceived)} />
+                )}
+                {gcashSent > 0 && (
+                  <Row icon={<Smartphone size={14} />} label="GCash sent (log)" value={formatPeso(gcashSent)} accent="danger" />
+                )}
+              </Section>
 
               {/* Expenses */}
-              <section>
-                <p className="text-xs font-semibold text-ink-soft uppercase tracking-wide mb-2">Expenses</p>
-                <div className="bg-surface-sunken rounded-xl">
-                  <Row icon={<Wallet size={14} className="text-danger" />}
-                    label="Total expenses" value={formatPeso(expenses.total)} accent="danger" />
-                </div>
-              </section>
+              <Section title="Expenses">
+                {expenseTotal > 0 ? (
+                  <Row icon={<Wallet size={14} className="text-danger" />} label="Total expenses" value={formatPeso(expenseTotal)} accent="danger" />
+                ) : (
+                  <p className="text-xs text-ink-faint px-3.5 py-2">No expenses logged today</p>
+                )}
+              </Section>
 
               {/* Cash count */}
-              <section>
-                <p className="text-xs font-semibold text-ink-soft uppercase tracking-wide mb-2">Cash count</p>
-                <div className="bg-surface-sunken rounded-xl divide-y divide-border">
-                  <Row label="Starting cash" value={formatPeso(startingCash)} plain />
-                  <Row label="Expected cash" value={formatPeso(expectedCash)} plain />
-                </div>
+              <Section title="Cash count">
+                <Row label="Starting cash" value={formatPeso(startingCash)} />
+                <Row label="+ Cash collected" value={formatPeso(summary?.cash_collected ?? 0)} />
+                <Row label="− Expenses" value={formatPeso(expenseTotal)} accent="danger" />
+                <Row label="= Expected in drawer" value={formatPeso(expectedCash)} bold />
 
-                <div className="mt-3">
+                <div className="px-3.5 pt-2 pb-1">
                   <label className="block text-xs font-semibold text-ink-soft mb-1.5">
-                    Actual cash in drawer (optional)
+                    Actual cash in drawer
                   </label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-faint">₱</span>
@@ -203,16 +235,16 @@ export default function CloseDayModal({ startingCash, onClose }: Props) {
                     />
                   </div>
                   {closingCash && (
-                    <p className={`text-xs mt-1.5 tabular font-medium ${variance >= 0 ? 'text-success' : 'text-danger'}`}>
-                      {variance >= 0 ? 'Over' : 'Short'} by {formatPeso(Math.abs(variance))}
+                    <p className={`text-xs mt-1.5 tabular font-semibold ${variance >= 0 ? 'text-success' : 'text-danger'}`}>
+                      {variance >= 0 ? '↑ Over' : '↓ Short'} by {formatPeso(Math.abs(variance))}
                     </p>
                   )}
                 </div>
-              </section>
+              </Section>
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-semibold text-ink-soft mb-1.5">Notes for the day</label>
+                <label className="block text-xs font-semibold text-ink-soft mb-1.5">Notes</label>
                 <textarea
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
@@ -241,24 +273,31 @@ export default function CloseDayModal({ startingCash, onClose }: Props) {
   )
 }
 
-function Row({ icon, label, value, accent, plain }: {
-  icon?: React.ReactNode; label: string; value: string; accent?: 'gold' | 'danger'; plain?: boolean
-}) {
-  const valueClass = accent === 'gold'
-    ? 'text-gold'
-    : accent === 'danger'
-    ? 'text-danger'
-    : plain
-    ? 'text-ink'
-    : 'text-ink font-semibold'
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-ink-soft uppercase tracking-wide mb-2">{title}</p>
+      <div className="bg-surface-sunken rounded-xl divide-y divide-border overflow-hidden">
+        {children}
+      </div>
+    </div>
+  )
+}
 
+function Row({ icon, label, value, accent, bold, mono }: {
+  icon?: React.ReactNode; label: string; value: string
+  accent?: 'gold' | 'danger'; bold?: boolean; mono?: boolean
+}) {
+  const valueClass = accent === 'gold' ? 'text-gold' : accent === 'danger' ? 'text-danger' : 'text-ink'
   return (
     <div className="flex items-center justify-between px-3.5 py-2.5 text-sm">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 text-ink-soft">
         {icon}
-        <span className="text-ink-soft">{label}</span>
+        <span>{label}</span>
       </div>
-      <span className={`tabular ${valueClass}`}>{value}</span>
+      <span className={`tabular ${valueClass} ${bold ? 'font-bold' : ''} ${mono ? '' : ''}`}>
+        {value}
+      </span>
     </div>
   )
 }
