@@ -7,6 +7,8 @@ import { formatPeso } from '@/lib/utils/currency';
 import { Plus, Search, Package } from 'lucide-react';
 import Badge from '@/src/components/ui/badge';
 import type { Product } from '@/types/database';
+import { exportProducts } from './action';
+import { toast } from 'sonner';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -28,6 +30,21 @@ export default function ProductsPage() {
     if (data) setProducts(data);
     setLoading(false);
   };
+
+  const handleExport = async () => {
+  try {
+    const csvData = await exportProducts()
+    const blob = new Blob([csvData], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `products_${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (error: any) {
+    toast.error('Export failed: ' + error.message)
+  }
+}
 
   useEffect(() => {
     const timeout = setTimeout(fetchProducts, 200);

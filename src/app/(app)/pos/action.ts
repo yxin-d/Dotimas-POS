@@ -15,10 +15,19 @@ interface CheckoutPayload {
 }
 
 export async function completeSale(payload: CheckoutPayload) {
-  const supabase = await createClient()  // ✅ No refs, just create the client
+  const supabase = await createClient()
 
   const total  = payload.items.reduce((s, i) => s + i.subtotal, 0)
   const change = payload.isCredit ? 0 : Math.max(0, payload.amountReceived - total)
+
+  // ─── DEDUCT STOCK FROM BATCHES (FIFO) ────────────
+  // This runs BEFORE any sale record is created, so if stock is insufficient,
+  // the entire operation is aborted and no data is written.
+  for (const item of payload.items) {
+    if (!item.product.id.startsWith(CUSTOM_ITEM_PREFIX)) {
+      await deductFromBatches(item.product.id, item.qty)
+    }
+  }
 
   // 1. Create invoice header
   const { data: invoice, error: invoiceError } = await supabase
@@ -109,4 +118,16 @@ export async function recordCreditPayment(
   if (error) throw new Error(error.message)
 
   return { newBalance: customer.credit_balance - amount }
+}
+
+// ─── HELPER: Deduct from batches using the PostgreSQL function ───
+export async function deductFromBatches(productId: string, qty: number) {
+  const supabase = await createClient()
+  
+  const { error } = await supabase.rpc('deduct_from_batches', {
+    p_product_id: productId,
+    p_qty: qty
+  })
+
+  if (error) throw new Error(`Stock deduction failed: ${error.message}`)
 }
