@@ -1,11 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { formatPeso } from '@/lib/utils/currency';
 import { AlertTriangle, Wallet, TrendingUp, Receipt } from 'lucide-react';
-
-const supabase = createClient();
 
 interface DailyStats {
   gross_sales?: number;
@@ -31,22 +29,25 @@ export default function DashboardPage() {
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([]);
   const [creditSummary, setCreditSummary] = useState<CreditItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const supabaseRef = useRef<any>(null);
 
   useEffect(() => {
+    supabaseRef.current = createClient();
+
     const fetchData = async () => {
       setLoading(true);
 
-      const { data: daily } = await supabase
+      const { data: daily } = await supabaseRef.current
         .from('daily_summary')
         .select('*')
         .order('sale_date', { ascending: false })
         .limit(1);
 
-      const { data: lowStock } = await supabase
+      const { data: lowStock } = await supabaseRef.current
         .from('low_stock')
         .select('*');
 
-      const { data: credit } = await supabase
+      const { data: credit } = await supabaseRef.current
         .from('credit_summary')
         .select('*')
         .limit(5);

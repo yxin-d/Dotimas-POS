@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useCart } from '@/hooks/use-cart'
 import { useBarcodeScanner } from '@/hooks/use-barcode-scanner'
@@ -12,14 +12,12 @@ import HoldModal from '@/src/components/pos/hold-modal'
 import HeldOrderModal from '@/src/components/pos/held-order-modal'
 import StartingCashModal from '@/src/components/pos/starting-cash-modal'
 import CloseDayModal from '@/src/components/pos/close-day-modal'
-import CustomItemModal from '@/src/components/pos/custom-item-modal'
+import CustomItemModal from '@/src/components/pos/custom-item'
 import type { Product, ProductCategory, HeldInvoice } from '@/types/database'
 import { Search, UtensilsCrossed, PowerOff, Clock, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { todayPH, formatDate } from '@/lib/utils/currency'
 import { formatPeso } from '@/lib/utils/currency'
-
-const supabase = createClient()
 
 type ActiveModal = 'checkout' | 'credit' | 'hold' | 'customItem' | 'closeDay' | null
 
@@ -34,15 +32,24 @@ export default function POSPage() {
   const [openedHeld, setOpenedHeld]     = useState<HeldInvoice | null>(null)
   const [startingCash, setStartingCash] = useState<number | null>(null)
   const [sessionLoaded, setSessionLoaded] = useState(false)
+  const [clientReady, setClientReady]   = useState(false) // 👈 new readiness state
+  const supabaseRef = useRef<any>(null)
 
   const { addItem } = useCart()
 
+  // ── INIT SUPABASE CLIENT ────────────────────────────────
+  useEffect(() => {
+    supabaseRef.current = createClient()
+    setClientReady(true)
+  }, [])
+
   // ── Load products + categories ────────────────────────────
   useEffect(() => {
+    if (!clientReady) return
     async function load() {
       const [prodRes, catRes] = await Promise.all([
-        supabase.from('products').select('*').eq('is_active', true).order('name'),
-        supabase.from('product_categories').select('*').order('sort_order'),
+        supabaseRef.current.from('products').select('*').eq('is_active', true).order('name'),
+        supabaseRef.current.from('product_categories').select('*').order('sort_order'),
       ])
       if (prodRes.error) toast.error('Failed to load products')
       setProducts(prodRes.data ?? [])
@@ -50,11 +57,12 @@ export default function POSPage() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [clientReady]) // 👈 depends on clientReady
 
   // ── Load held orders ──────────────────────────────────────
   async function fetchHeld() {
-    const { data } = await supabase
+    if (!clientReady) return
+    const { data } = await supabaseRef.current
       .from('held_invoices')
       .select('*')
       .eq('status', 'held')
@@ -62,20 +70,48 @@ export default function POSPage() {
     setHeldOrders((data as HeldInvoice[]) ?? [])
   }
 
-  useEffect(() => { fetchHeld() }, [])
+  useEffect(() => {
+    if (clientReady) fetchHeld()
+  }, [clientReady])
 
   // ── Session check ─────────────────────────────────────────
   useEffect(() => {
-    supabase
-      .from('pos_sessions')
-      .select('starting_cash')
-      .eq('session_date', todayPH())
-      .single()
-      .then(({ data }) => {
-        if (data) setStartingCash(data.starting_cash)
-        setSessionLoaded(true)
-      })
-  }, [])
+    if (!clientReady) return;
+
+    const fetchSession = async () => {
+      try {
+        const { data, error } = await supabaseRef.current
+          .from('pos_sessions')
+          .select('starting_cash')
+          .eq('session_date', todayPH())
+          .single();
+
+        // If there's an error, log it but don't break the UI
+        // "PGRST116" means "No rows found" – totally fine for a new day
+        if (error) {
+          console.warn('Session fetch warning:', error.message);
+          // If it's a different error (e.g., table missing), you might want to toast
+          if (error.code !== 'PGRST116') {
+            toast.error('Could not load session data');
+          }
+        }
+
+        if (data) {
+          setStartingCash(data.starting_cash);
+        }
+
+      } catch (err) {
+        // Catches network errors or unexpected exceptions
+        console.error('Session fetch failed:', err);
+        toast.error('Network error loading session');
+      } finally {
+        // ✅ CRITICAL: Always mark session as loaded, even on error
+        setSessionLoaded(true);
+      }
+    };
+
+    fetchSession();
+  }, [clientReady]);
 
   // ── Barcode scanner ───────────────────────────────────────
   const handleBarcode = useCallback((barcode: string) => {

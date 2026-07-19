@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatPeso, formatDate, todayPH } from '@/lib/utils/currency'
 import { toast } from 'sonner'
@@ -12,11 +12,14 @@ export default function GcashPage() {
   const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
   const [filterDate, setFilterDate] = useState(todayPH())
+  const supabaseRef = useRef<any>(null)
 
-  const supabase = createClient()
+  useEffect(() => {
+    supabaseRef.current = createClient()
+  }, []);
 
   async function fetchEntries() {
-    const { data } = await supabase
+    const { data } = await supabaseRef.current
       .from('gcash_log')
       .select('*')
       .eq('txn_date', filterDate)

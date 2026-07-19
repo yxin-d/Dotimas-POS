@@ -1,14 +1,12 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { formatPeso, formatDate } from '@/lib/utils/currency';
 import { toast } from 'sonner';
 import Input from '@/src/components/ui/input';
 import Button from '@/src/components/ui/button';
-
-const supabase = createClient();
 
 interface Customer {
   id: string;
@@ -34,16 +32,28 @@ export default function CustomerCreditPage() {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const supabaseRef = useRef<any>(null);
+  const [clientReady, setClientReady] = useState(false);
 
+  // ── Initialize Supabase client ──────────────────────────
+  useEffect(() => {
+    supabaseRef.current = createClient();
+    setClientReady(true);
+  }, []);
+
+  // ── Fetch data ───────────────────────────────────────────
   const fetchData = async () => {
-    const { data: cust } = await supabase
+    // ✅ Guard: ensure client exists
+    if (!supabaseRef.current) return;
+
+    const { data: cust } = await supabaseRef.current
       .from('customers')
       .select('*')
       .eq('id', id)
       .single();
     setCustomer(cust);
 
-    const { data: entries } = await supabase
+    const { data: entries } = await supabaseRef.current
       .from('ledger')
       .select('*')
       .eq('customer_id', id)
@@ -51,11 +61,14 @@ export default function CustomerCreditPage() {
     if (entries) setLedger(entries);
   };
 
+  // ── Trigger fetch when id changes or client becomes ready ──
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching on id change is intentional
-    if (id) fetchData();
-  }, [id]);
+    if (id && clientReady) {
+      fetchData();
+    }
+  }, [id, clientReady]);
 
+  // ── Handle payment ───────────────────────────────────────
   const handlePayment = async () => {
     const amount = parseFloat(paymentAmount);
     if (!amount || amount <= 0) {
@@ -63,11 +76,17 @@ export default function CustomerCreditPage() {
       return;
     }
 
+    // ✅ Guard: ensure client exists
+    if (!supabaseRef.current) {
+      toast.error('Client not ready');
+      return;
+    }
+
     setSaving(true);
     const currentBalance = customer?.credit_balance || 0;
     const newBalance = currentBalance - amount;
 
-    const { error } = await supabase.from('ledger').insert({
+    const { error } = await supabaseRef.current.from('ledger').insert({
       customer_id: id,
       entry_type: 'payment_made',
       amount,
@@ -81,7 +100,7 @@ export default function CustomerCreditPage() {
       toast.success('Payment recorded');
       setPaymentAmount('');
       setNote('');
-      fetchData();
+      fetchData(); // refresh the list
     }
     setSaving(false);
   };

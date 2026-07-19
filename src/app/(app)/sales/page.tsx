@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatPeso, formatDate, todayPH } from '@/lib/utils/currency'
 import { Search, ChevronDown, ChevronUp, Receipt } from 'lucide-react'
@@ -24,8 +24,6 @@ interface SaleLine {
   subtotal: number
 }
 
-const supabase = createClient()
-
 export default function SalesPage() {
   const [invoices, setInvoices]     = useState<InvoiceRow[]>([])
   const [expanded, setExpanded]     = useState<string | null>(null)
@@ -34,38 +32,74 @@ export default function SalesPage() {
   const [dateFrom, setDateFrom]     = useState(todayPH())
   const [dateTo, setDateTo]         = useState(todayPH())
   const [search, setSearch]         = useState('')
+  const [clientReady, setClientReady] = useState(false) // 👈 new state
+  const supabaseRef = useRef<any>(null)
 
+  // ── Initialize Supabase client ──────────────────────────
   useEffect(() => {
-    setLoading(true)
-    let query = supabase
-      .from('sale_invoice')
-      .select('*, customers(name)')
-      .gte('created_at', `${dateFrom}T00:00:00`)
-      .lte('created_at', `${dateTo}T23:59:59`)
-      .order('created_at', { ascending: false })
+    supabaseRef.current = createClient()
+    setClientReady(true)
+  }, [])
 
-    query.then(({ data }) => {
-      setInvoices((data ?? []) as InvoiceRow[])
-      setLoading(false)
-    })
-  }, [dateFrom, dateTo])
+  // ── Fetch invoices ──────────────────────────────────────
+  useEffect(() => {
+    if (!clientReady) return
 
+    const fetchInvoices = async () => {
+      setLoading(true)
+      try {
+        const { data, error } = await supabaseRef.current
+          .from('sale_invoice')
+          .select('*, customers(name)')
+          .gte('created_at', `${dateFrom}T00:00:00`)
+          .lte('created_at', `${dateTo}T23:59:59`)
+          .order('created_at', { ascending: false })
+
+        if (error) {
+          console.error('Invoice fetch error:', error.message)
+          // Optionally toast error
+        } else {
+          setInvoices((data ?? []) as InvoiceRow[])
+        }
+      } catch (err) {
+        console.error('Invoice fetch exception:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchInvoices()
+  }, [dateFrom, dateTo, clientReady])
+
+  // ── Toggle expand + fetch line items ────────────────────
   async function toggleExpand(invoiceId: string) {
-    if (expanded === invoiceId) { setExpanded(null); return }
+    if (expanded === invoiceId) {
+      setExpanded(null)
+      return
+    }
     setExpanded(invoiceId)
-    if (!lines[invoiceId]) {
-      const { data } = await supabase
-        .from('sales')
-        .select('*')
-        .eq('invoice_id', invoiceId)
-      setLines(prev => ({ ...prev, [invoiceId]: data ?? [] }))
+
+    // Only fetch if we haven't already
+    if (!lines[invoiceId] && clientReady) {
+      try {
+        const { data, error } = await supabaseRef.current
+          .from('sales')
+          .select('*')
+          .eq('invoice_id', invoiceId)
+
+        if (!error && data) {
+          setLines(prev => ({ ...prev, [invoiceId]: data ?? [] }))
+        }
+      } catch (err) {
+        console.error('Failed to fetch line items:', err)
+      }
     }
   }
 
   // Client-side filter by customer name or invoice ID
   const filtered = search.trim()
     ? invoices.filter(i =>
-        i.customers?.name.toLowerCase().includes(search.toLowerCase()) ||
+        i.customers?.name?.toLowerCase().includes(search.toLowerCase()) ||
         i.id.toLowerCase().includes(search.toLowerCase())
       )
     : invoices

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { formatPeso } from '@/lib/utils/currency';
@@ -8,16 +8,19 @@ import { Plus, Search, Package } from 'lucide-react';
 import Badge from '@/src/components/ui/badge';
 import type { Product } from '@/types/database';
 
-const supabase = createClient();
-
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const supabase = useRef<any>(null);
+
+  useEffect(() => {
+    supabase.current = createClient();
+  }, []);
 
   const fetchProducts = async () => {
     setLoading(true);
-    let query = supabase.from('products').select('*').order('name');
+    let query = supabase.current.from('products').select('*').order('name');
     if (search.trim()) {
       query = query.or(`name.ilike.%${search}%,barcode.ilike.%${search}%`);
     }

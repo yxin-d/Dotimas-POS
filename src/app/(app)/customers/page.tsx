@@ -1,25 +1,43 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { formatPeso } from '@/lib/utils/currency'
 import type { Customer } from '@/types/database'
 import { UserPlus, Search } from 'lucide-react'
 
-const supabase = createClient()
-
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch]       = useState('')
   const [loading, setLoading]     = useState(true)
+  const supabaseRef = useRef<any>(null);
 
   useEffect(() => {
-    setLoading(true)
-    let query = supabase.from('customers').select('*').order('name')
-    if (search.trim()) query = query.ilike('name', `%${search}%`)
-    query.then(({ data }) => { setCustomers(data ?? []); setLoading(false) })
-  }, [search])
+    supabaseRef.current = createClient();
+  }, []);
+
+  // useEffect(() => {
+  //   setLoading(true)
+  //   const client = supabaseRef.current || createClient()
+  //   let query = client.from('customers').select('*').order('name')
+  //   if (search.trim()) query = query.ilike('name', `%${search}%`)
+  //   query.then(({ data }) => { setCustomers(data ?? []); setLoading(false) })
+  // }, [])
+
+  useEffect(() => {
+    async function fetchCustomers() {
+      if (!supabaseRef.current) return;
+
+      const [{ data: customersData }, { data: filteredCustomersData }] = await Promise.all([
+        supabaseRef.current.from('customers').select('*').order('name'),
+        supabaseRef.current.from('customers').select('*').ilike('name', `%${search}%`).order('name')
+      ]);
+      setCustomers(filteredCustomersData ?? customersData ?? []);
+      setLoading(false);
+    }
+    fetchCustomers();
+  }, [search]);
 
   return (
     <div className="p-6 max-w-5xl mx-auto">

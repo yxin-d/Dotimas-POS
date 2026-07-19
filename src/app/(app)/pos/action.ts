@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import type { CartItem, Customer, PaymentMethod } from '@/types/database'
+import { useRef } from 'react'
 
 // Prefix used by use-cart for ad-hoc/canteen items
 const CUSTOM_ITEM_PREFIX = '__custom__'
@@ -15,13 +16,13 @@ interface CheckoutPayload {
 }
 
 export async function completeSale(payload: CheckoutPayload) {
-  const supabase = await createClient()
+  const supabaseRef = useRef<any>(null)
 
   const total  = payload.items.reduce((s, i) => s + i.subtotal, 0)
   const change = payload.isCredit ? 0 : Math.max(0, payload.amountReceived - total)
 
   // 1. Create invoice header
-  const { data: invoice, error: invoiceError } = await supabase
+  const { data: invoice, error: invoiceError } = await supabaseRef.current
     .from('sale_invoice')
     .insert({
       customer_id:     payload.customer?.id ?? null,
@@ -52,7 +53,7 @@ export async function completeSale(payload: CheckoutPayload) {
     }
   })
 
-  const { error: linesError } = await supabase.from('sales').insert(lineItems)
+  const { error: linesError } = await supabaseRef.current.from('sales').insert(lineItems)
   if (linesError) throw new Error(`Line items error: ${linesError.message}`)
 
   // 3. Custom items don't deduct stock (no DB product), so the trigger
@@ -63,7 +64,7 @@ export async function completeSale(payload: CheckoutPayload) {
     const currentBalance = payload.customer.credit_balance ?? 0
     const newBalance     = currentBalance + total
 
-    const { error: ledgerError } = await supabase.from('ledger').insert({
+    const { error: ledgerError } = await supabaseRef.current.from('ledger').insert({
       customer_id:     payload.customer.id,
       invoice_id:      invoice.id,
       entry_type:      'credit_given',

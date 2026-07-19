@@ -6,11 +6,15 @@ import { ArrowLeft } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import ProductForm, { type ProductFormValues } from '@/src/components/products/product-form';
 import { toast } from 'sonner';
-
-const supabase = createClient();
+import { useEffect, useRef } from 'react';
 
 export default function NewProductPage() {
   const router = useRouter();
+  const supabase = useRef<any>(null);
+
+  useEffect(() => {
+    supabase.current = createClient();
+  }, []);
 
   async function handleSubmit(form: ProductFormValues) {
     const payload = {
@@ -24,7 +28,7 @@ export default function NewProductPage() {
       is_active: form.is_active,
     };
 
-    const { error } = await supabase.from('products').insert([payload]);
+    const { error } = await supabase.current.from('products').insert([payload]);
     if (error) {
       toast.error(error.message);
     } else {

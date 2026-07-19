@@ -2,23 +2,26 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import ProductForm, { type ProductFormValues } from '@/src/components/products/product-form';
 import { toast } from 'sonner';
-
-const supabase = createClient();
 
 export default function EditProductPage() {
   const { id } = useParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [initialValues, setInitialValues] = useState<Partial<ProductFormValues>>({});
+  const supabase = useRef<any>(null);
+
+  useEffect(() => {
+    supabase.current = createClient();
+  }, []);
 
   useEffect(() => {
     async function fetchProduct() {
-      const { data } = await supabase.from('products').select('*').eq('id', id).single();
+      const { data } = await supabase.current.from('products').select('*').eq('id', id).single();
       if (data) {
         setInitialValues({
           name: data.name || '',
@@ -48,7 +51,7 @@ export default function EditProductPage() {
       is_active: form.is_active,
     };
 
-    const { error } = await supabase.from('products').update(payload).eq('id', id as string);
+    const { error } = await supabase.current.from('products').update(payload).eq('id', id as string);
     if (error) {
       toast.error(error.message);
     } else {
