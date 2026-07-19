@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Store, Loader2 } from 'lucide-react'
@@ -9,19 +9,22 @@ import Button from '@/src/components/ui/button'
 
 export default function LoginPage() {
   const router = useRouter()
-  const supabase = createClient()
-
+  const supabase = useRef<any>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    supabase.current = createClient()
+  }, [])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.current.auth.signInWithPassword({ email, password })
 
     if (error) {
       setError(error.message)
