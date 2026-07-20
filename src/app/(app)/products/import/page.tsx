@@ -22,13 +22,8 @@ export default function ImportProductsPage() {
     formData.append('file', file)
 
     try {
-      const response = await fetch('/api/import-products', {
-        method: 'POST',
-        body: formData,
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Import failed')
-      setResult(data.message)
+      const result = await importProducts(formData)
+      setResult(result.message)
       toast.success('Import successful!')
       // Optionally refresh product list after a delay
       setTimeout(() => router.push('/products'), 2000)
