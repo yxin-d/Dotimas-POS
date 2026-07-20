@@ -8,14 +8,16 @@ interface ProductImportRow {
   name: string
   sku?: string
   barcode?: string
+  volume?: string                // 👈 NEW
+  category?: string              // 👈 NEW – category name (will map to category_id)
   price: number
   cost?: number
-  stocks?: number                      // ✅ Will be used as initial batch quantity
+  stocks?: number
   low_stock_threshold?: number
   is_active?: boolean
-  // NEW BATCH FIELDS:
-  batch_quantity?: number              // If provided, overrides stocks for batch
-  batch_expiration_date?: string       // REQUIRED if batch_quantity provided
+  // Batch fields (unchanged)
+  batch_quantity?: number
+  batch_expiration_date?: string
   batch_purchase_date?: string
   batch_cost?: number
 }
@@ -30,18 +32,20 @@ export async function importProducts(formData: FormData) {
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
   const data: any[] = XLSX.utils.sheet_to_json(sheet)
 
-  // Normalize column names
+  // ─── Normalize column names ──────────────────────────────
   const mapKey = (key: string) => {
     const lower = key.toLowerCase().trim()
     if (['name', 'product name'].includes(lower)) return 'name'
     if (['sku', 'product code'].includes(lower)) return 'sku'
     if (['barcode', 'upc'].includes(lower)) return 'barcode'
+    if (['volume', 'size', 'pack size'].includes(lower)) return 'volume'        // 👈 NEW
+    if (['category', 'category name', 'type'].includes(lower)) return 'category' // 👈 NEW
     if (['price', 'selling price', 'unit price'].includes(lower)) return 'price'
     if (['cost', 'cost price', 'purchase price'].includes(lower)) return 'cost'
     if (['stocks', 'stock', 'quantity', 'qty'].includes(lower)) return 'stocks'
     if (['low_stock_threshold', 'threshold', 'alert level'].includes(lower)) return 'low_stock_threshold'
     if (['is_active', 'active', 'status'].includes(lower)) return 'is_active'
-    // BATCH FIELDS
+    // Batch fields
     if (['batch_qty', 'batch quantity', 'batch stocks'].includes(lower)) return 'batch_quantity'
     if (['batch_expiry', 'expiry', 'expiration date', 'best before'].includes(lower)) return 'batch_expiration_date'
     if (['batch_purchase_date', 'purchase date', 'date received'].includes(lower)) return 'batch_purchase_date'
@@ -68,17 +72,15 @@ export async function importProducts(formData: FormData) {
     return mapped as ProductImportRow
   })
 
-  // Validate rows
+  // ─── Validate rows ──────────────────────────────────────
   const errors: string[] = []
   for (const [index, row] of normalizedData.entries()) {
     if (!row.name) errors.push(`Row ${index + 2}: Name is required`)
     if (row.price === undefined || row.price < 0) errors.push(`Row ${index + 2}: Price must be a positive number`)
 
-    // If batch_quantity is provided, expiration date is required
     if (row.batch_quantity && row.batch_quantity > 0 && !row.batch_expiration_date) {
       errors.push(`Row ${index + 2}: Expiration date is required when batch quantity is provided`)
     }
-    // Validate date format if provided
     if (row.batch_expiration_date && isNaN(Date.parse(row.batch_expiration_date))) {
       errors.push(`Row ${index + 2}: Invalid expiration date format (use YYYY-MM-DD)`)
     }
@@ -88,31 +90,58 @@ export async function importProducts(formData: FormData) {
   }
   if (errors.length > 0) throw new Error(`Validation errors:\n${errors.join('\n')}`)
 
-  // Upsert products
+  // ─── Fetch existing categories to map by name ────────────
+  const { data: allCategories } = await supabase
+    .from('product_categories')
+    .select('id, name')
+  const categoryMap = new Map<string, string>()
+  allCategories?.forEach(cat => categoryMap.set(cat.name.toLowerCase(), cat.id))
+
+  // ─── Upsert products ──────────────────────────────────────
   const results = { inserted: 0, updated: 0, batches_created: 0, skipped: 0 }
 
   for (const row of normalizedData) {
-    // Prepare product payload
+    // Map category name → ID
+    let categoryId: string | null = null
+    if (row.category) {
+      const normalizedCatName = row.category.toLowerCase()
+      categoryId = categoryMap.get(normalizedCatName) || null
+      if (!categoryId) {
+        console.warn(`Category "${row.category}" not found; leaving null`)
+      }
+    }
+
+    // Build product payload with new fields
     const productPayload = {
       name: row.name,
       sku: row.sku || null,
       barcode: row.barcode || null,
+      volume: row.volume || null,                 // 👈 NEW
+      category_id: categoryId,                    // 👈 NEW – now uses mapped ID
       price: row.price,
       cost: row.cost || 0,
-      stocks: row.batch_quantity || row.stocks || 0, // total stock (will be updated via trigger later)
+      stocks: row.batch_quantity || row.stocks || 0,
       low_stock_threshold: row.low_stock_threshold || 5,
       is_active: row.is_active !== undefined ? row.is_active : true,
     }
 
     let productId: string | null = null
 
-    // Upsert by barcode first, then by SKU
+    // Upsert: check by barcode first, then SKU
     let existingId: string | null = null
     if (productPayload.barcode) {
       const { data: existing } = await supabase
         .from('products')
         .select('id')
         .eq('barcode', productPayload.barcode)
+        .maybeSingle()
+      if (existing) existingId = existing.id
+    }
+    if (!existingId && productPayload.sku) {
+      const { data: existing } = await supabase
+        .from('products')
+        .select('id')
+        .eq('sku', productPayload.sku)
         .maybeSingle()
       if (existing) existingId = existing.id
     }
@@ -146,42 +175,38 @@ export async function importProducts(formData: FormData) {
       }
     }
 
-    // ─── CREATE BATCH if batch_quantity provided ───
+    // ─── Create batch if batch_quantity provided ──────────
     if (row.batch_quantity && row.batch_quantity > 0 && productId) {
       const batchPayload = {
         product_id: productId,
-        batch_code: row.sku || null, // use SKU as batch code if available
+        batch_code: row.sku || null,
         purchase_date: row.batch_purchase_date || new Date().toISOString().slice(0, 10),
         expiration_date: row.batch_expiration_date,
         quantity: row.batch_quantity,
         remaining: row.batch_quantity,
         cost: row.batch_cost || row.cost || 0,
       }
-
       const { error } = await supabase
         .from('product_batches')
         .insert(batchPayload)
-
       if (!error) {
         results.batches_created++
       } else {
         console.error('Batch insert error:', error)
-        // Don't fail the whole import, just log
       }
     }
   }
 
   return {
-    message: `✅ Import complete: ${results.inserted} products inserted, ${results.updated} updated, ${results.batches_created} batches created, ${results.skipped} skipped`,
+    message: `✅ Import complete: ${results.inserted} inserted, ${results.updated} updated, ${results.batches_created} batches created, ${results.skipped} skipped`,
     ...results,
   }
 }
 
-// ------------------- EXPORT -------------------
+// ------------------- EXPORT (unchanged) -------------------
 export async function exportProducts() {
   const supabase = await createClient()
 
-  // Option 1: Export product-level data only (simple)
   const { data: products, error: productError } = await supabase
     .from('products')
     .select('name, sku, barcode, price, cost, stocks, low_stock_threshold, is_active')
@@ -189,8 +214,6 @@ export async function exportProducts() {
 
   if (productError) throw new Error('Failed to fetch products')
 
-  // Option 2: Export with batch details (recommended for full inventory view)
-  // We'll export both sheets (or combine into one)
   const { data: batches, error: batchError } = await supabase
     .from('product_batches')
     .select(`
@@ -206,7 +229,6 @@ export async function exportProducts() {
 
   if (batchError) throw new Error('Failed to fetch batches')
 
-  // Create a combined view for CSV (flattened)
   const combinedData = batches?.map(b => {
     const productData = Array.isArray(b.products) ? b.products[0] : b.products
     return {
@@ -222,7 +244,6 @@ export async function exportProducts() {
     }
   }) || []
 
-  // If no batches exist, fallback to product-only export
   if (combinedData.length === 0) {
     const worksheet = XLSX.utils.json_to_sheet(products)
     const csv = XLSX.utils.sheet_to_csv(worksheet)

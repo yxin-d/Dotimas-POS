@@ -33,6 +33,7 @@ export interface Database {
         Row: {
           id: string
           name: string
+          volume: string | null
           sku: string | null
           barcode: string | null
           category_id: string | null

@@ -43,11 +43,11 @@ export default function EditProductPage() {
     const payload = {
       name: form.name,
       barcode: form.barcode || null,
-      price: parseFloat(form.price) || 0,
-      srp: parseFloat(form.srp) || 0,
-      cost: parseFloat(form.cost) || 0,
-      stocks: parseInt(form.stocks) || 0,
-      low_stock_threshold: parseInt(form.low_stock_threshold) || 5,
+      price: parseFloat(form.price ?? '0') || 0,
+      srp: parseFloat(form.srp ?? '0') || 0,
+      cost: parseFloat(form.cost ?? '0') || 0,
+      stocks: parseInt(form.stocks ?? '0') || 0,
+      low_stock_threshold: parseInt(form.low_stock_threshold ?? '5') || 5,
       is_active: form.is_active,
     };
 
@@ -76,10 +76,9 @@ export default function EditProductPage() {
         </div>
       ) : (
         <ProductForm
-          initialValues={initialValues}
-          submitLabel="Update product"
-          onSubmit={handleSubmit}
-        />
+            initialValues={initialValues}
+            submitLabel="Update product"
+            onSubmit={handleSubmit} categories={[]}        />
       )}
     </div>
   );

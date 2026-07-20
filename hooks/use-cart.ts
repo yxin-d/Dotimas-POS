@@ -62,6 +62,7 @@ export const useCart = create<CartStore>((set, get) => ({
     const fakeProduct: Product = {
       id: `${CUSTOM_ITEM_PREFIX}${Date.now()}`,
       name,
+      volume: null,
       sku: null,
       barcode: null,
       category_id: null,
