@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { formatPeso } from '@/lib/utils/currency';
-import { Plus, Search, Package } from 'lucide-react';
+import { Plus, Search, Package, FileSpreadsheet } from 'lucide-react';
 import Badge from '@/src/components/ui/badge';
 import type { Product } from '@/types/database';
-import { exportProducts } from './action';
+import { exportProducts, importProducts } from './action';
 import { toast } from 'sonner';
 
 export default function ProductsPage() {
@@ -55,13 +55,29 @@ export default function ProductsPage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-ink">Products</h1>
-        <Link
-          href="/products/new"
-          className="inline-flex items-center gap-1.5 bg-primary text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary-dark transition-colors"
-        >
-          <Plus size={16} />
-          New product
-        </Link>
+        <div className="flex gap-2">
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center gap-1.5 bg-gray-100 text-ink px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-colors"
+          >
+            <FileSpreadsheet size={16} />
+            Export CSV
+          </button>
+          <Link
+            href="/products/import"
+            className="inline-flex items-center gap-1.5 bg-secondary text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-secondary-dark transition-colors"
+          >
+            <Package size={16} />
+            Import products
+          </Link>
+          <Link
+            href="/products/new"
+            className="inline-flex items-center gap-1.5 bg-primary text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary-dark transition-colors"
+          >
+            <Plus size={16} />
+            New product
+          </Link>
+        </div>
       </div>
 
       <div className="relative mb-4">

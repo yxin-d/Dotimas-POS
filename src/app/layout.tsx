@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tindahan POS",
-  description: "Point of sale for the store — sales, stock, and utang in one place.",
+  title: "Dotimas",
+  description: "Multipurpose POS — sales, stock, and credits in one place.",
 };
 
 export default function RootLayout({
