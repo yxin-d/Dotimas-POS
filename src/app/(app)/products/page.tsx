@@ -40,27 +40,27 @@ export default function ProductsPage() {
   };
 
   const fetchProducts = async () => {
-    setLoading(true);
-    let query = supabase.current
-      .from('products')
-      .select(`
-        *,
-        categories ( name )
-      `)
-      .eq('is_active', true)
-      .order('name');
+  setLoading(true);
+  let query = supabase.current
+    .from('products')
+    .select(`
+      *,
+      categories ( name )
+    `)
+    // ❌ Remove this line: .eq('is_active', true)
+    .order('name');
 
-    if (search.trim()) {
-      query = query.or(`name.ilike.%${search}%,barcode.ilike.%${search}%`);
-    }
-    if (categoryFilter !== 'all') {
-      query = query.eq('category_id', categoryFilter);
-    }
+  if (search.trim()) {
+    query = query.or(`name.ilike.%${search}%,barcode.ilike.%${search}%`);
+  }
+  if (categoryFilter !== 'all') {
+    query = query.eq('category_id', categoryFilter);
+  }
 
-    const { data } = await query;
-    if (data) setProducts(data);
-    setLoading(false);
-  };
+  const { data } = await query;
+  if (data) setProducts(data);
+  setLoading(false);
+};
 
   // Trigger fetch when search or category changes
   useEffect(() => {
