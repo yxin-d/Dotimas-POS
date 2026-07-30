@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { formatPeso } from '@/lib/utils/currency';
 import { AlertTriangle, Wallet, Receipt, ChevronLeft, ChevronRight } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface DailyStats {
   gross_sales?: number;
@@ -16,7 +17,7 @@ interface LowStockItem {
   name: string;
   stocks: number;
   low_stock_threshold: number;
-  categories?: { name: string } | null;
+  product_categories?: { name: string } | null;
 }
 
 interface CreditItem {
@@ -30,7 +31,7 @@ interface ProductWithCategory {
   name: string;
   stocks: number;
   low_stock_threshold: number;
-  categories?: { name: string } | null;
+  product_categories?: { name: string } | null;
 }
 
 export default function DashboardPage() {
@@ -59,16 +60,18 @@ export default function DashboardPage() {
         .limit(1);
 
       // 2. Products with category – explicitly type the result
-      const { data: products } = await supabaseRef.current
+      const { data: products, error: productsError } = await supabaseRef.current
         .from('products')
         .select(`
           id,
           name,
           stocks,
           low_stock_threshold,
-          categories ( name )
+          product_categories ( name )
         `)
         .eq('is_active', true);
+
+      if (productsError) toast.error('Failed to load low-stock data: ' + productsError.message);
 
       // Cast to our interface (or use type assertion)
       const typedProducts = (products || []) as ProductWithCategory[];
@@ -76,13 +79,13 @@ export default function DashboardPage() {
       // Filter low stock: stocks <= threshold AND category is NOT 'meals'
       const lowStock = typedProducts
         .filter(p => p.stocks <= p.low_stock_threshold)
-        .filter(p => p.categories?.name !== 'meals')
+        .filter(p => p.product_categories?.name !== 'meals')
         .map(p => ({
           id: p.id,
           name: p.name,
           stocks: p.stocks,
           low_stock_threshold: p.low_stock_threshold,
-          categories: p.categories,
+          product_categories: p.product_categories,
         }));
 
       // 3. Credit summary

@@ -11,7 +11,7 @@ import { exportProducts } from './action';
 import { toast } from 'sonner';
 
 interface ProductWithCategory extends Product {
-  categories?: { name: string } | null;
+  product_categories?: { name: string } | null;
 }
 
 export default function ProductsPage() {
@@ -45,9 +45,8 @@ export default function ProductsPage() {
     .from('products')
     .select(`
       *,
-      categories ( name )
+      product_categories ( name )
     `)
-    // ❌ Remove this line: .eq('is_active', true)
     .order('name');
 
   if (search.trim()) {
@@ -57,8 +56,12 @@ export default function ProductsPage() {
     query = query.eq('category_id', categoryFilter);
   }
 
-  const { data } = await query;
-  if (data) setProducts(data);
+  const { data, error } = await query;
+  if (error) {
+    toast.error('Failed to load products: ' + error.message);
+  } else if (data) {
+    setProducts(data);
+  }
   setLoading(false);
 };
 
@@ -193,7 +196,7 @@ export default function ProductsPage() {
                     <td className="px-4 py-3 text-sm tabular text-ink-soft">{p.sku || '—'}</td>
                     <td className="px-4 py-3 text-sm font-medium text-ink">{p.name}</td>
                     <td className="px-4 py-3 text-sm text-ink-soft">
-                      {p.categories?.name || '—'}
+                      {p.product_categories?.name || '—'}
                     </td>
                     <td className="px-4 py-3 text-sm tabular text-ink text-right">{formatPeso(p.price)}</td>
                     <td className="px-4 py-3 text-sm tabular text-ink-faint text-right">{formatPeso(p.cost)}</td>
