@@ -40,7 +40,9 @@ export default function ProductForm({
   existingSkus = [],
 }: ProductFormProps) {
   const [loading, setLoading] = useState(false);
-  const [isSkuManuallyEdited, setIsSkuManuallyEdited] = useState(false);
+  // If we're editing an existing product that already has a SKU, treat it as
+  // "manually set" so the auto-generator doesn't silently overwrite it on load.
+  const [isSkuManuallyEdited, setIsSkuManuallyEdited] = useState(Boolean(initialValues?.sku));
   const skuInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -214,7 +216,82 @@ export default function ProductForm({
         </select>
       </div>
 
-      {/* ─── Price, SRP, Cost, Stocks ─── (unchanged) ─── */}
+      {/* ─── Price, SRP, Cost ─── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-ink-soft mb-1">
+            Price <span className="text-danger">*</span>
+          </label>
+          <input
+            {...register('price')}
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            className="w-full border border-border rounded-xl px-4 py-2.5 text-sm bg-surface tabular focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          />
+          {errors.price && <p className="text-danger text-xs mt-1">{errors.price.message}</p>}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-ink-soft mb-1">SRP (optional)</label>
+          <input
+            {...register('srp')}
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            className="w-full border border-border rounded-xl px-4 py-2.5 text-sm bg-surface tabular focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-ink-soft mb-1">Cost (optional)</label>
+          <input
+            {...register('cost')}
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            className="w-full border border-border rounded-xl px-4 py-2.5 text-sm bg-surface tabular focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          />
+        </div>
+      </div>
+
+      {/* ─── Stocks, Low stock threshold ─── */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-ink-soft mb-1">Stocks (optional)</label>
+          <input
+            {...register('stocks')}
+            type="number"
+            step="1"
+            min="0"
+            placeholder="0"
+            className="w-full border border-border rounded-xl px-4 py-2.5 text-sm bg-surface tabular focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-ink-soft mb-1">Low stock alert at</label>
+          <input
+            {...register('low_stock_threshold')}
+            type="number"
+            step="1"
+            min="0"
+            placeholder="5"
+            className="w-full border border-border rounded-xl px-4 py-2.5 text-sm bg-surface tabular focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          />
+        </div>
+      </div>
+
+      {/* ─── Active toggle ─── */}
+      <label className="flex items-center gap-2.5 cursor-pointer w-fit">
+        <input
+          type="checkbox"
+          checked={isActive}
+          onChange={(e) => setValue('is_active', e.target.checked)}
+          className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30"
+        />
+        <span className="text-sm font-medium text-ink-soft">Active (visible on POS)</span>
+      </label>
 
       {/* ─── Submit ─── */}
       <button

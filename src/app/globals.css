@@ -2,12 +2,13 @@
 
 /*
   ── Design tokens ──────────────────────────────────────────
-  Visual identity: "the till and the ledger."
+  Visual identity: "the till and the ledger," in a cool teal/blue key.
   This is a sari-sari-store point-of-sale — it handles cash,
-  peso amounts, and utang (credit) all day. The palette reads
-  as a cash drawer and receipt tape rather than generic SaaS
-  blue: deep bill-green as the working color, a coin-gold accent
-  for money figures, warm paper canvas behind everything.
+  peso amounts, and utang (credit) all day. Deep teal is the
+  working color, a cool slate-blue canvas sits behind everything,
+  and a coin-gold accent is kept for money figures specifically
+  (peso amounts, credit balances) since that association reads as
+  "cash" regardless of the brand color.
   Every peso amount in the app renders in tabular mono — like a
   register tape — so numbers always line up and feel counted,
   not just displayed.
@@ -15,32 +16,32 @@
 
 :root {
   /* Canvas & surface */
-  --color-canvas: #F2F4F1;       /* soft sage-paper background */
+  --color-canvas: #F1F5F6;       /* cool, soft blue-gray background */
   --color-surface: #FFFFFF;
-  --color-surface-sunken: #EAEDE8;
+  --color-surface-sunken: #E7EEF0;
 
   /* Ink */
-  --color-ink: #14231D;          /* near-black, warm green-black */
-  --color-ink-soft: #4B5D53;
-  --color-ink-faint: #8A968E;
-  --color-border: #DDE3DC;
+  --color-ink: #10242A;          /* near-black, cool teal-black */
+  --color-ink-soft: #45636B;
+  --color-ink-faint: #8AA0A6;
+  --color-border: #D7E2E5;
 
-  /* Brand — deep bill-green */
-  --color-primary: #0F6B54;
-  --color-primary-dark: #0A4F3E;
-  --color-primary-soft: #E4F0EB;
+  /* Brand — deep teal */
+  --color-primary: #0E7C86;
+  --color-primary-dark: #0A5C64;
+  --color-primary-soft: #E1F1F3;
 
-  /* Money accent — coin gold, used sparingly for emphasis */
+  /* Money accent — coin gold, used sparingly for emphasis on peso figures */
   --color-gold: #B6862C;
   --color-gold-soft: #FBF1DD;
 
   /* Status */
-  --color-danger: #AA3A2C;
+  --color-danger: #B3402F;
   --color-danger-soft: #FBEAE7;
   --color-warning: #A6740E;
   --color-warning-soft: #FBF1DD;
-  --color-success: #0F6B54;
-  --color-success-soft: #E4F0EB;
+  --color-success: #0E7C86;
+  --color-success-soft: #E1F1F3;
 }
 
 @theme inline {

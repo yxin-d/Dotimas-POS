@@ -2,24 +2,46 @@
 
 import { useCart } from '@/hooks/use-cart'
 import { formatPeso } from '@/lib/utils/currency'
-import { ShoppingCart, Trash2, CreditCard, PauseCircle } from 'lucide-react'
+import { ShoppingCart, Trash2, CreditCard, PauseCircle, X } from 'lucide-react'
+import { cn } from '@/lib/utils/utils'
 import CartItem from './cart-item'
 
 interface Props {
   onCheckout: () => void
   onCredit:   () => void
   onHold:     () => void
+  /** Mobile only: whether the cart sheet is open (ignored on lg+, where it's always visible) */
+  isMobileOpen?: boolean
+  onMobileClose?: () => void
 }
 
-export default function Cart({ onCheckout, onCredit, onHold }: Props) {
+export default function Cart({ onCheckout, onCredit, onHold, isMobileOpen = false, onMobileClose }: Props) {
   const { items, clearCart, total, itemCount } = useCart()
   const hasItems = items.length > 0
 
   return (
-    <div className="w-80 shrink-0 flex flex-col bg-surface border-l border-border h-full">
+    <>
+      {/* Mobile-only backdrop behind the cart sheet */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/30 z-40 lg:hidden"
+          onClick={onMobileClose}
+          aria-hidden="true"
+        />
+      )}
+
+      <div
+        className={cn(
+          // Mobile: bottom sheet, slides up over the product grid
+          'fixed inset-x-0 bottom-0 z-50 flex flex-col bg-surface border-t border-border rounded-t-2xl max-h-[85vh] transition-transform duration-300 ease-in-out',
+          isMobileOpen ? 'translate-y-0' : 'translate-y-full',
+          // Desktop: static sidebar, always visible
+          'lg:static lg:translate-y-0 lg:z-auto lg:w-80 lg:shrink-0 lg:h-full lg:max-h-none lg:rounded-none lg:border-t-0 lg:border-l'
+        )}
+      >
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
           <ShoppingCart size={16} className="text-ink-faint" />
           <span className="font-semibold text-ink text-sm">Cart</span>
@@ -29,15 +51,24 @@ export default function Cart({ onCheckout, onCredit, onHold }: Props) {
             </span>
           )}
         </div>
-        {hasItems && (
+        <div className="flex items-center gap-3">
+          {hasItems && (
+            <button
+              onClick={clearCart}
+              className="text-ink-faint hover:text-danger transition-colors"
+              title="Clear cart"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
           <button
-            onClick={clearCart}
-            className="text-ink-faint hover:text-danger transition-colors"
-            title="Clear cart"
+            onClick={onMobileClose}
+            className="text-ink-faint hover:text-ink transition-colors lg:hidden"
+            title="Close cart"
           >
-            <Trash2 size={14} />
+            <X size={18} />
           </button>
-        )}
+        </div>
       </div>
 
       {/* Items */}
@@ -96,6 +127,7 @@ export default function Cart({ onCheckout, onCredit, onHold }: Props) {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   )
 }

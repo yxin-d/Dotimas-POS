@@ -14,80 +14,43 @@ interface CheckoutPayload {
   isCredit:        boolean
 }
 
+// Shape sent to the complete_sale RPC. Only qty and (for genuinely custom
+// items) an explicit price are trusted from the client — real product
+// price/cost are re-looked-up from the DB inside the function itself.
+interface RpcSaleItem {
+  product_id:   string | null
+  product_name: string
+  qty:          number
+  custom_price: number | null
+}
+
 export async function completeSale(payload: CheckoutPayload) {
   const supabase = await createClient()
 
-  const total  = payload.items.reduce((s, i) => s + i.subtotal, 0)
-  const change = payload.isCredit ? 0 : Math.max(0, payload.amountReceived - total)
-
-  // ─── DEDUCT STOCK FROM BATCHES (FIFO) ────────────
-  // This runs BEFORE any sale record is created, so if stock is insufficient,
-  // the entire operation is aborted and no data is written.
-  for (const item of payload.items) {
-    if (!item.product.id.startsWith(CUSTOM_ITEM_PREFIX)) {
-      await deductFromBatches(item.product.id, item.qty)
-    }
-  }
-
-  // 1. Create invoice header
-  const { data: invoice, error: invoiceError } = await supabase
-    .from('sale_invoice')
-    .insert({
-      customer_id:     payload.customer?.id ?? null,
-      amount_received: payload.isCredit ? 0 : payload.amountReceived,
-      change,
-      payment_method:  payload.paymentMethod,
-      is_credit:       payload.isCredit,
-    })
-    .select()
-    .single()
-
-  if (invoiceError) throw new Error(`Invoice error: ${invoiceError.message}`)
-
-  // 2. Insert line items
-  const lineItems = payload.items.map(item => {
+  const items: RpcSaleItem[] = payload.items.map(item => {
     const isCustom = item.product.id.startsWith(CUSTOM_ITEM_PREFIX)
     return {
-      invoice_id:   invoice.id,
       product_id:   isCustom ? null : item.product.id,
       product_name: item.product.name,
       qty:          item.qty,
-      unit_price:   item.customPrice ?? item.product.price,
-      unit_cost:    item.product.cost ?? 0,
-      subtotal:     item.subtotal,
-      net_profit:   item.net_profit,
+      // For custom items this IS the price (required). For real products this
+      // is only a canteen-style override when the cashier explicitly set one;
+      // otherwise null, and complete_sale uses the product's live DB price.
+      custom_price: isCustom ? (item.customPrice ?? 0) : (item.customPrice ?? null),
     }
   })
 
-  const { error: linesError } = await supabase.from('sales').insert(lineItems)
-  if (linesError) throw new Error(`Line items error: ${linesError.message}`)
+  const { data, error } = await supabase.rpc('complete_sale', {
+    p_customer_id:     payload.customer?.id ?? null,
+    p_payment_method:  payload.paymentMethod,
+    p_amount_received: payload.isCredit ? 0 : payload.amountReceived,
+    p_is_credit:       payload.isCredit,
+    p_items:           items,
+  })
 
-  // 3. If credit sale, create ledger entry (with proper balance fetch)
-  if (payload.isCredit && payload.customer) {
-    const { data: cust, error: custError } = await supabase
-      .from('customers')
-      .select('credit_balance')
-      .eq('id', payload.customer.id)
-      .single()
+  if (error) throw new Error(error.message)
 
-    if (custError) throw new Error(`Customer fetch error: ${custError.message}`)
-
-    const currentBalance = cust?.credit_balance ?? 0
-    const newBalance     = currentBalance + total
-
-    const { error: ledgerError } = await supabase.from('ledger').insert({
-      customer_id:     payload.customer.id,
-      invoice_id:      invoice.id,
-      entry_type:      'credit_given',
-      amount:          total,
-      running_balance: newBalance,
-      description:     `Credit from invoice #${invoice.id.slice(0, 8).toUpperCase()}`,
-    })
-
-    if (ledgerError) throw new Error(`Ledger error: ${ledgerError.message}`)
-  }
-
-  return { invoiceId: invoice.id }
+  return { invoiceId: data as string }
 }
 
 export async function recordCreditPayment(
@@ -97,37 +60,15 @@ export async function recordCreditPayment(
 ) {
   const supabase = await createClient()
 
-  const { data: customer, error: fetchError } = await supabase
-    .from('customers')
-    .select('credit_balance, name')
-    .eq('id', customerId)
-    .single()
-
-  if (fetchError || !customer) throw new Error('Customer not found')
-  if (amount > customer.credit_balance)
-    throw new Error(`Payment ₱${amount} exceeds balance ₱${customer.credit_balance}`)
-
-  const { error } = await supabase.from('ledger').insert({
-    customer_id:     customerId,
-    entry_type:      'payment_made',
-    amount,
-    running_balance: customer.credit_balance - amount,
-    description:     notes ?? 'Payment received',
+  const { data, error } = await supabase.rpc('record_credit_change', {
+    p_customer_id: customerId,
+    p_invoice_id:  null,
+    p_entry_type:  'payment_made',
+    p_amount:      amount,
+    p_description: notes ?? 'Payment received',
   })
 
   if (error) throw new Error(error.message)
 
-  return { newBalance: customer.credit_balance - amount }
-}
-
-// ─── HELPER: Deduct from batches using the PostgreSQL function ───
-export async function deductFromBatches(productId: string, qty: number) {
-  const supabase = await createClient()
-  
-  const { error } = await supabase.rpc('deduct_from_batches', {
-    p_product_id: productId,
-    p_qty: qty
-  })
-
-  if (error) throw new Error(`Stock deduction failed: ${error.message}`)
+  return { newBalance: data as number }
 }
