@@ -1,215 +1,179 @@
-export type PaymentMethod   = 'cash' | 'gcash' | 'maya' | 'mixed' | 'credit'
-export type LedgerEntryType = 'credit_given' | 'payment_made'
-export type ExpenseCategory = 'supplies' | 'utilities' | 'salary' | 'maintenance' | 'food' | 'other'
-export type HoldStatus      = 'held' | 'completed' | 'voided'
-export type GcashDirection  = 'received' | 'sent'
+// Types mirror the live V2 schema (supabase/migrations/0001-0007). Keep these
+// in sync with the DB — if a migration changes a column, update it here too.
 
-export interface Database {
-  public: {
-    Tables: {
-      customers: {
-        Row: {
-          id: string
-          name: string
-          phone: string | null
-          loyalty_pts: number
-          credit_balance: number
-          created_at: string
-        }
-        Insert: Omit<Database['public']['Tables']['customers']['Row'], 'id' | 'created_at' | 'loyalty_pts' | 'credit_balance'> & { id?: string }
-        Update: Partial<Database['public']['Tables']['customers']['Insert']>
-      }
-      product_categories: {
-        Row: {
-          id: string
-          name: string
-          sort_order: number
-          created_at: string
-        }
-        Insert: Omit<Database['public']['Tables']['product_categories']['Row'], 'id' | 'created_at'>
-        Update: Partial<Database['public']['Tables']['product_categories']['Insert']>
-      }
-      products: {
-        Row: {
-          id: string
-          name: string
-          volume: string | null
-          sku: string | null
-          barcode: string | null
-          category_id: string | null
-          price: number
-          srp: number | null
-          cost: number | null
-          stocks: number
-          low_stock_threshold: number
-          is_active: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: Omit<Database['public']['Tables']['products']['Row'], 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Database['public']['Tables']['products']['Insert']>
-      }
-      sale_invoice: {
-        Row: {
-          id: string
-          customer_id: string | null
-          amount_received: number
-          change: number
-          payment_method: PaymentMethod
-          is_credit: boolean
-          total_amount: number
-          created_at: string
-        }
-        Insert: Omit<Database['public']['Tables']['sale_invoice']['Row'], 'id' | 'created_at' | 'total_amount'> & { total_amount?: number }
-        Update: Partial<Database['public']['Tables']['sale_invoice']['Insert']>
-      }
-      sales: {
-        Row: {
-          id: string
-          invoice_id: string
-          product_id: string | null
-          product_name: string
-          qty: number
-          unit_price: number
-          unit_cost: number
-          subtotal: number
-          net_profit: number
-        }
-        Insert: Omit<Database['public']['Tables']['sales']['Row'], 'id'>
-        Update: Partial<Database['public']['Tables']['sales']['Insert']>
-      }
-      ledger: {
-        Row: {
-          id: string
-          customer_id: string
-          invoice_id: string | null
-          entry_type: LedgerEntryType
-          amount: number
-          running_balance: number
-          description: string | null
-          created_at: string
-        }
-        Insert: Omit<Database['public']['Tables']['ledger']['Row'], 'id' | 'created_at'>
-        Update: Partial<Database['public']['Tables']['ledger']['Insert']>
-      }
-      expenses: {
-        Row: {
-          id: string
-          description: string
-          category: ExpenseCategory
-          amount: number
-          expense_date: string
-          notes: string | null
-          created_at: string
-        }
-        Insert: Omit<Database['public']['Tables']['expenses']['Row'], 'id' | 'created_at'>
-        Update: Partial<Database['public']['Tables']['expenses']['Insert']>
-      }
-      held_invoices: {
-        Row: {
-          id: string
-          label: string
-          customer_id: string | null
-          items_json: CartItem[]
-          total: number
-          status: HoldStatus
-          created_at: string
-          updated_at: string
-        }
-        Insert: Omit<Database['public']['Tables']['held_invoices']['Row'], 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Database['public']['Tables']['held_invoices']['Insert']>
-      }
-      gcash_log: {
-        Row: {
-          id: string
-          direction: GcashDirection
-          amount: number
-          sender: string | null
-          ref_number: string | null
-          notes: string | null
-          txn_date: string
-          created_at: string
-        }
-        Insert: Omit<Database['public']['Tables']['gcash_log']['Row'], 'id' | 'created_at'>
-        Update: Partial<Database['public']['Tables']['gcash_log']['Insert']>
-      }
-      pos_sessions: {
-        Row: {
-          id: string
-          session_date: string
-          starting_cash: number
-          closing_cash: number | null
-          notes: string | null
-          closed_at: string | null
-          created_at: string
-        }
-        Insert: Omit<Database['public']['Tables']['pos_sessions']['Row'], 'id' | 'created_at'>
-        Update: Partial<Database['public']['Tables']['pos_sessions']['Insert']>
-      }
-    }
-    Views: {
-      daily_summary: {
-        Row: {
-          sale_date: string
-          invoice_count: number
-          gross_sales: number
-          total_profit: number
-          credit_given: number
-          gcash_sales: number
-          cash_collected: number
-        }
-      }
-      credit_summary: {
-        Row: {
-          id: string
-          name: string
-          phone: string | null
-          credit_balance: number
-          loyalty_pts: number
-          total_entries: number
-          last_activity: string
-        }
-      }
-      low_stock: {
-        Row: {
-          id: string
-          name: string
-          barcode: string | null
-          stocks: number
-          low_stock_threshold: number
-          price: number
-        }
-      }
-    }
-  }
+export type PaymentMethod = 'cash' | 'gcash' | 'maya' | 'mixed' | 'credit'
+export type LedgerEntryType = 'credit_given' | 'payment_made' | 'opening_balance'
+export type InvoiceStatus = 'completed' | 'voided'
+export type GcashDirection = 'received' | 'sent'
+export type GcashSubmissionStatus = 'pending' | 'confirmed' | 'rejected'
+export type SessionStatus = 'open' | 'closed'
+
+export interface Staff {
+  id: string
+  name: string
+  initials: string
+  is_active: boolean
+  created_at: string
 }
 
-// ─── App-level row types ────────────────────────────────────
+export interface ProductCategory {
+  id: string
+  name: string
+  sort_order: number
+  created_at: string
+}
 
-export type Customer        = Database['public']['Tables']['customers']['Row']
-export type ProductCategory = Database['public']['Tables']['product_categories']['Row']
-export type Product         = Database['public']['Tables']['products']['Row']
-export type SaleInvoice     = Database['public']['Tables']['sale_invoice']['Row']
-export type SaleLine        = Database['public']['Tables']['sales']['Row']
-export type LedgerEntry     = Database['public']['Tables']['ledger']['Row']
-export type Expense         = Database['public']['Tables']['expenses']['Row']
-export type HeldInvoice     = Database['public']['Tables']['held_invoices']['Row']
-export type GcashEntry      = Database['public']['Tables']['gcash_log']['Row']
-export type PosSession      = Database['public']['Tables']['pos_sessions']['Row']
+export interface Product {
+  id: string
+  name: string
+  sku: string | null
+  barcode: string | null
+  volume: string | null
+  category_id: string | null
+  price: number
+  cost: number
+  stocks: number
+  low_stock_threshold: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  // present when joined with product_categories(name)
+  product_categories?: { name: string } | null
+}
 
-// ─── Cart types ─────────────────────────────────────────────
+export interface Customer {
+  id: string
+  name: string
+  phone: string | null
+  credit_balance: number
+  credit_warning_threshold: number | null
+  created_at: string
+}
+
+export interface LedgerEntry {
+  id: string
+  customer_id: string
+  invoice_id: string | null
+  entry_type: LedgerEntryType
+  amount: number
+  running_balance: number
+  description: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface PosSession {
+  id: string
+  session_date: string
+  status: SessionStatus
+  starting_cash: number
+  closing_cash: number | null
+  expected_cash: number | null
+  variance: number | null
+  opened_by: string | null
+  opened_at: string
+  closed_by: string | null
+  closed_at: string | null
+  notes: string | null
+}
+
+export interface StaffShift {
+  id: string
+  session_id: string
+  staff_id: string
+  started_at: string
+  ended_at: string | null
+}
+
+export interface SaleInvoice {
+  id: string
+  customer_id: string | null
+  staff_id: string | null
+  shift_id: string | null
+  payment_method: PaymentMethod | null
+  is_credit: boolean
+  amount_received: number
+  change: number
+  total_amount: number
+  status: InvoiceStatus
+  voided_at: string | null
+  voided_by: string | null
+  void_reason: string | null
+  created_at: string
+}
+
+export interface InvoicePayment {
+  id: string
+  invoice_id: string
+  method: PaymentMethod
+  amount: number
+}
+
+export interface SaleLine {
+  id: string
+  invoice_id: string
+  product_id: string | null
+  product_name: string
+  qty: number
+  unit_price: number
+  unit_cost: number
+  subtotal: number
+  net_profit: number
+  created_at: string
+}
+
+export interface Expense {
+  id: string
+  staff_id: string | null
+  shift_id: string | null
+  description: string
+  category: string | null
+  amount: number
+  expense_date: string
+  notes: string | null
+  created_at: string
+}
+
+export interface GcashLogEntry {
+  id: string
+  direction: GcashDirection
+  amount: number
+  sender: string | null
+  ref_number: string | null
+  notes: string | null
+  txn_date: string
+  created_by: string | null
+  created_at: string
+}
+
+export interface GcashSubmission {
+  id: string
+  customer_name: string
+  direction: GcashDirection
+  amount: number
+  reference_number: string
+  transaction_date: string
+  notes: string | null
+  status: GcashSubmissionStatus
+  submitted_at: string
+  reviewed_by: string | null
+  reviewed_at: string | null
+  review_notes: string | null
+}
+
+// ---- POS-side cart types (client-only, not a DB table) ----
+
+// Prefix used to flag a cart line as a fully custom/ad-hoc item (no product record)
+export const CUSTOM_ITEM_PREFIX = '__custom__'
 
 export interface CartItem {
   product: Product
   qty: number
+  customPrice?: number | null
   subtotal: number
-  net_profit: number
-  /** If set, overrides product.price for this line (custom/canteen pricing) */
-  customPrice?: number
 }
 
-export interface CartState {
-  items: CartItem[]
-  customer: Customer | null
-  discount: number
+export interface PaymentSplit {
+  method: Exclude<PaymentMethod, 'mixed' | 'credit'>
+  amount: number
 }

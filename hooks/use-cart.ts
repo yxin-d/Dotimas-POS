@@ -1,30 +1,31 @@
 'use client'
 
 import { create } from 'zustand'
-import type { CartItem, CartState, Customer, Product } from '@/types/database'
+import type { CartItem, Customer, Product } from '@/types/database'
+import { CUSTOM_ITEM_PREFIX } from '@/types/database'
+
+interface CartState {
+  items: CartItem[]
+  customer: Customer | null
+}
 
 interface CartStore extends CartState {
   addItem: (product: Product, customPrice?: number) => void
-  addCustomItem: (name: string, price: number) => void   // canteen / ad-hoc
+  addCustomItem: (name: string, price: number) => void   // canteen / ad-hoc, via the shortcut key
   removeItem: (productId: string) => void
   updateQty: (productId: string, qty: number) => void
   updateCustomPrice: (productId: string, price: number) => void
   setCustomer: (customer: Customer | null) => void
   clearCart: () => void
-  loadFromHeld: (items: CartItem[], customer: Customer | null) => void
 
   total: () => number
   totalProfit: () => number
   itemCount: () => number
 }
 
-// Sentinel product ID for custom/canteen items (no DB product)
-export const CUSTOM_ITEM_PREFIX = '__custom__'
-
 export const useCart = create<CartStore>((set, get) => ({
   items: [],
   customer: null,
-  discount: 0,
 
   addItem: (product, customPrice) => {
     const effectivePrice = customPrice ?? product.price
@@ -35,30 +36,20 @@ export const useCart = create<CartStore>((set, get) => ({
         return {
           items: state.items.map(i =>
             i.product.id === product.id && !i.customPrice
-              ? {
-                  ...i,
-                  qty: newQty,
-                  subtotal: effectivePrice * newQty,
-                  net_profit: (effectivePrice - (product.cost ?? 0)) * newQty,
-                }
+              ? { ...i, qty: newQty, subtotal: effectivePrice * newQty }
               : i
           ),
         }
       }
       return {
-        items: [...state.items, {
-          product,
-          qty: 1,
-          customPrice: customPrice,
-          subtotal: effectivePrice,
-          net_profit: effectivePrice - (product.cost ?? 0),
-        }],
+        items: [...state.items, { product, qty: 1, customPrice, subtotal: effectivePrice }],
       }
     })
   },
 
-  // For canteen meals / ad-hoc items with no product record
+  // For canteen meals / ad-hoc items with no product record — the shortcut-key quick-add
   addCustomItem: (name, price) => {
+    const now = new Date().toISOString()
     const fakeProduct: Product = {
       id: `${CUSTOM_ITEM_PREFIX}${Date.now()}`,
       name,
@@ -67,22 +58,15 @@ export const useCart = create<CartStore>((set, get) => ({
       barcode: null,
       category_id: null,
       price,
-      srp: null,
       cost: 0,
-      stocks: 999,
+      stocks: 0,
       low_stock_threshold: 0,
       is_active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: now,
+      updated_at: now,
     }
     set(state => ({
-      items: [...state.items, {
-        product: fakeProduct,
-        qty: 1,
-        customPrice: price,
-        subtotal: price,
-        net_profit: price,
-      }],
+      items: [...state.items, { product: fakeProduct, qty: 1, customPrice: price, subtotal: price }],
     }))
   },
 
@@ -96,7 +80,7 @@ export const useCart = create<CartStore>((set, get) => ({
       items: state.items.map(i => {
         if (i.product.id !== productId) return i
         const price = i.customPrice ?? i.product.price
-        return { ...i, qty, subtotal: price * qty, net_profit: (price - (i.product.cost ?? 0)) * qty }
+        return { ...i, qty, subtotal: price * qty }
       }),
     }))
   },
@@ -105,22 +89,18 @@ export const useCart = create<CartStore>((set, get) => ({
     set(state => ({
       items: state.items.map(i => {
         if (i.product.id !== productId) return i
-        return {
-          ...i,
-          customPrice: price,
-          subtotal: price * i.qty,
-          net_profit: (price - (i.product.cost ?? 0)) * i.qty,
-        }
+        return { ...i, customPrice: price, subtotal: price * i.qty }
       }),
     }))
   },
 
   setCustomer: (customer) => set({ customer }),
-  clearCart: () => set({ items: [], customer: null, discount: 0 }),
-
-  loadFromHeld: (items, customer) => set({ items, customer, discount: 0 }),
+  clearCart: () => set({ items: [], customer: null }),
 
   total: () => get().items.reduce((s, i) => s + i.subtotal, 0),
-  totalProfit: () => get().items.reduce((s, i) => s + i.net_profit, 0),
+  totalProfit: () => get().items.reduce((s, i) => {
+    const price = i.customPrice ?? i.product.price
+    return s + (price - (i.product.cost ?? 0)) * i.qty
+  }, 0),
   itemCount: () => get().items.reduce((s, i) => s + i.qty, 0),
 }))

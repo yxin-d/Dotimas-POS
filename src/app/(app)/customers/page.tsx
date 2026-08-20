@@ -81,7 +81,6 @@ export default function CustomersPage() {
               <tr>
                 <th className="px-5 py-3 text-xs font-semibold text-ink-soft uppercase tracking-wide">Name</th>
                 <th className="px-5 py-3 text-xs font-semibold text-ink-soft uppercase tracking-wide">Phone</th>
-                <th className="px-5 py-3 text-xs font-semibold text-ink-soft uppercase tracking-wide text-right">Loyalty</th>
                 <th className="px-5 py-3 text-xs font-semibold text-ink-soft uppercase tracking-wide text-right">Credit</th>
                 <th className="px-5 py-3" />
               </tr>
@@ -91,7 +90,6 @@ export default function CustomersPage() {
                 <tr key={c.id} className="hover:bg-surface-sunken/60 transition-colors">
                   <td className="px-5 py-3 text-sm font-medium text-ink">{c.name}</td>
                   <td className="px-5 py-3 text-sm text-ink-soft">{c.phone || '—'}</td>
-                  <td className="px-5 py-3 text-sm tabular text-ink-soft text-right">{c.loyalty_pts} pts</td>
                   <td className="px-5 py-3 text-right">
                     {c.credit_balance > 0 ? (
                       <span className="text-sm tabular font-semibold text-gold">{formatPeso(c.credit_balance)}</span>

@@ -5,10 +5,10 @@ import { createClient } from '@/lib/supabase/client'
 import { formatPeso, formatDate, todayPH } from '@/lib/utils/currency'
 import { toast } from 'sonner'
 import { Smartphone, Plus, X, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
-import type { GcashEntry, GcashDirection } from '@/types/database'
+import type { GcashLogEntry, GcashDirection } from '@/types/database'
 
 export default function GcashPage() {
-  const [entries, setEntries]     = useState<GcashEntry[]>([])
+  const [entries, setEntries]     = useState<GcashLogEntry[]>([])
   const [loading, setLoading]     = useState(true)
   const [showForm, setShowForm]   = useState(false)
   const [filterDate, setFilterDate] = useState(todayPH())

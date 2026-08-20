@@ -88,12 +88,12 @@ export default function CustomerPicker({ onSelect, onClose }: Props) {
               </div>
               <div className="text-right">
                 {c.credit_balance > 0 && (
-                  <p className="text-xs font-medium text-gold tabular">
+                  <p className={`text-xs font-medium tabular ${
+                    c.credit_warning_threshold != null && c.credit_balance > c.credit_warning_threshold
+                      ? 'text-danger' : 'text-gold'
+                  }`}>
                     Utang: {formatPeso(c.credit_balance)}
                   </p>
-                )}
-                {c.loyalty_pts > 0 && (
-                  <p className="text-xs text-ink-faint tabular">{c.loyalty_pts} pts</p>
                 )}
               </div>
             </button>

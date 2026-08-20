@@ -40,31 +40,21 @@ export default function ProductGrid({ products, loading, onAdd }: Props) {
   )
 }
 
+// Stock is advisory only in V2 — low/out badges are informational, they never
+// block adding the item to the cart. Inventory counts aren't precise enough
+// to gate a sale on.
 function ProductTile({ product, onAdd }: { product: Product; onAdd: (p: Product) => void }) {
   const outOfStock = product.stocks <= 0
-  const lowStock   = product.stocks > 0 && product.stocks <= product.low_stock_threshold
+  const lowStock = product.stocks > 0 && product.stocks <= product.low_stock_threshold
 
   return (
     <button
       onClick={() => onAdd(product)}
-      disabled={outOfStock}
-      className={`
-        relative flex flex-col items-start text-left p-3 rounded-xl border transition-all
-        ${outOfStock
-          ? 'opacity-40 cursor-not-allowed bg-surface-sunken border-border'
-          : 'bg-surface border-border hover:border-primary hover:shadow-sm active:scale-95 cursor-pointer'
-        }
-      `}
+      className="relative flex flex-col items-start text-left p-3 rounded-xl border bg-surface border-border hover:border-primary hover:shadow-sm active:scale-95 cursor-pointer transition-all"
     >
-      {/* Stock badge */}
-      {outOfStock && (
-        <Badge tone="danger" className="absolute top-2 right-2">Out</Badge>
-      )}
-      {lowStock && (
-        <Badge tone="warning" className="absolute top-2 right-2">Low</Badge>
-      )}
+      {outOfStock && <Badge tone="danger" className="absolute top-2 right-2">Out</Badge>}
+      {lowStock && <Badge tone="warning" className="absolute top-2 right-2">Low</Badge>}
 
-      {/* Product icon placeholder */}
       <div className="w-10 h-10 bg-primary-soft rounded-lg flex items-center justify-center mb-2">
         <Package size={20} className="text-primary" strokeWidth={1.5} />
       </div>
@@ -73,9 +63,9 @@ function ProductTile({ product, onAdd }: { product: Product; onAdd: (p: Product)
         {product.name}
       </span>
       <span className="text-xs text-ink-faint mb-1 tabular">
-        {product.stocks} left
+        {product.volume ?? '\u00A0'}
       </span>
-      <span className="text-sm font-bold text-primary mt-auto tabular">
+      <span className="text-sm font-bold text-gold mt-auto tabular">
         {formatPeso(product.price)}
       </span>
     </button>
