@@ -1,72 +1,69 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, Upload } from 'lucide-react';
-import { importProducts } from '../action';
-import { toast } from 'sonner';
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { ArrowLeft, Upload } from 'lucide-react'
+import { importProducts } from '../action'
+import { toast } from 'sonner'
 
 export default function ImportProductsPage() {
-  const [file, setFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const router = useRouter();
+  const [file, setFile] = useState<File | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!file) return toast.error('Please select a file');
+    e.preventDefault()
+    if (!file) return toast.error('Please select a file')
 
-    setLoading(true);
-    setResult(null);
+    setLoading(true)
+    setResult(null)
 
-    const formData = new FormData();
-    formData.append('file', file);
+    const formData = new FormData()
+    formData.append('file', file)
 
     try {
-      const result = await importProducts(formData);
-      setResult(result.message);
-      toast.success('Import successful!');
-      setTimeout(() => router.push('/products'), 2000);
-    } catch (error: any) {
-      toast.error(error.message || 'Import failed');
-      setResult(`❌ Error: ${error.message}`);
+      const res = await importProducts(formData)
+      if (res.success) {
+        const details = res.skippedRows.length > 0
+          ? `\n\nSkipped rows:\n${res.skippedRows.slice(0, 20).join('\n')}${res.skippedRows.length > 20 ? `\n…and ${res.skippedRows.length - 20} more` : ''}`
+          : ''
+        setResult(res.message + details)
+        toast.success('Import complete!')
+        setTimeout(() => router.push('/products'), 2500)
+      } else {
+        toast.error(res.message)
+        setResult(`❌ ${res.message}`)
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Import failed'
+      toast.error(msg)
+      setResult(`❌ Error: ${msg}`)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      {/* Back button */}
-      <Link
-        href="/products"
-        className="inline-flex items-center gap-1.5 text-sm text-ink-faint hover:text-ink mb-4 transition-colors"
-      >
+      <Link href="/products" className="inline-flex items-center gap-1.5 text-sm text-ink-faint hover:text-ink mb-4 transition-colors">
         <ArrowLeft size={14} />
         Back to products
       </Link>
 
       <h1 className="text-2xl font-bold mb-4">Import Products</h1>
 
-      {/* Help text – updated with new fields */}
       <div className="bg-surface-sunken/60 rounded-xl p-4 mb-6 text-sm text-ink-faint space-y-1">
-        <p>Upload an Excel (<strong>.xlsx</strong>, <strong>.xls</strong>) or <strong>CSV</strong> file.</p>
+        <p>Upload an Excel (<strong>.xlsx</strong>, <strong>.xls</strong>) or <strong>CSV</strong> file. Every sheet tab is imported, and <strong>the sheet&apos;s tab name becomes the product category</strong> (created automatically if it doesn&apos;t exist yet). A plain CSV only has one implicit sheet, so it all lands in one category — use an XLSX with multiple tabs to import several categories at once.</p>
         <p>
           <span className="font-semibold text-ink-soft">Supported columns:</span><br />
-          <strong>name</strong> (required), <strong>sku</strong>, <strong>barcode</strong>, <strong>volume</strong>,{' '}
-          <strong>category</strong> (must match an existing category name exactly),{' '}
-          <strong>price</strong> (required), <strong>cost</strong>, <strong>stocks</strong>,{' '}
+          <strong>name</strong> (required), <strong>sku</strong> (auto-generated if left blank), <strong>barcode</strong> (optional), <strong>volume</strong>,{' '}
+          <strong>price</strong>, <strong>cost</strong>, <strong>stocks</strong>,{' '}
           <strong>low_stock_threshold</strong>, <strong>is_active</strong> (true/false).
         </p>
-        <p>
-          <span className="font-semibold text-ink-soft">Batch columns (optional):</span><br />
-          <strong>batch_quantity</strong>,{' '}
-          <strong>batch_expiration_date</strong> (required if batch_quantity provided),{' '}
-          <strong>batch_purchase_date</strong>, <strong>batch_cost</strong>.
-        </p>
-        <p className="text-xs text-ink-faint/70 mt-2">
-          <span className="font-semibold">Note:</span> If a category name is provided, it will be matched to an existing category ID. If no match is found, the product will be imported without a category.
+        <p className="text-xs text-ink-faint/70">
+          <span className="font-semibold">Note:</span> Rows with no price are still imported (so barcode/name aren&apos;t lost) but are marked inactive until you set a price — use Bulk edit on the Products page to price several at once.
         </p>
       </div>
 
@@ -88,21 +85,11 @@ export default function ImportProductsPage() {
             disabled={!file || loading}
             className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-dark transition-colors disabled:bg-ink-faint disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {loading ? (
-              'Importing...'
-            ) : (
-              <>
-                <Upload size={16} />
-                Import Products
-              </>
-            )}
+            {loading ? 'Importing...' : (<><Upload size={16} />Import Products</>)}
           </button>
           <button
             type="button"
-            onClick={() => {
-              setFile(null);
-              setResult(null);
-            }}
+            onClick={() => { setFile(null); setResult(null) }}
             className="px-4 border border-border rounded-lg text-ink-faint hover:bg-surface-sunken transition-colors disabled:opacity-50"
             disabled={!file || loading}
           >
@@ -117,28 +104,22 @@ export default function ImportProductsPage() {
         )}
       </form>
 
-      {/* Download sample template (optional) */}
       <div className="mt-6 text-center">
         <button
           onClick={() => {
-            // Create a sample CSV template
-            const headers = [
-              'name', 'sku', 'barcode', 'volume', 'category',
-              'price', 'cost', 'stocks', 'low_stock_threshold', 'is_active',
-              'batch_quantity', 'batch_expiration_date', 'batch_purchase_date', 'batch_cost'
-            ];
+            const headers = ['name', 'sku', 'barcode', 'volume', 'price', 'cost', 'stocks', 'low_stock_threshold', 'is_active']
             const sample = headers.join(',') + '\n' +
-              '"Milk 1L","MLK001","890123456789","1L","Dairy","85.00","65.00","50","5","true",,,,\n' +
-              '"Bread White","BRD002","890123456790","500g","Bakery","45.00","30.00","20","3","true",,,,\n' +
-              '"Cola 330ml","COLA03","890123456791","330ml","Beverages","25.00","18.00","100","10","true",,,,';
-            const blob = new Blob([sample], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'sample_product_import.csv';
-            a.click();
-            URL.revokeObjectURL(url);
-            toast.success('Sample CSV downloaded');
+              '"Milk 1L","","890123456789","1L","85.00","65.00","50","5","true"\n' +
+              '"Bread White","","890123456790","500g","45.00","30.00","20","3","true"\n' +
+              '"Cola 330ml","","890123456791","330ml","25.00","18.00","100","10","true"'
+            const blob = new Blob([sample], { type: 'text/csv' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = 'sample_product_import.csv'
+            a.click()
+            URL.revokeObjectURL(url)
+            toast.success('Sample CSV downloaded')
           }}
           className="text-sm text-primary hover:underline"
         >
@@ -146,5 +127,5 @@ export default function ImportProductsPage() {
         </button>
       </div>
     </div>
-  );
+  )
 }
