@@ -160,7 +160,7 @@ export default function ProductsClient({ initialProducts, categories }: Props) {
                 <button
                   key={p.id}
                   onClick={() => openEdit(p)}
-                  className={`flex items-center gap-3 px-4 py-3 text-left bg-surface hover:bg-primary-soft/40 transition-colors ${
+                  className={`grid grid-cols-[auto_1fr_auto] items-start gap-x-3 gap-y-1.5 px-4 py-3 text-left bg-surface hover:bg-primary-soft/40 transition-colors sm:flex sm:items-center ${
                     selectedProduct?.id === p.id ? 'bg-primary-soft' : ''
                   }`}
                 >
@@ -169,15 +169,18 @@ export default function ProductsClient({ initialProducts, categories }: Props) {
                     checked={selectedIds.has(p.id)}
                     onChange={e => { e.stopPropagation(); toggleSelect(p.id) }}
                     onClick={e => e.stopPropagation()}
-                    className="accent-primary shrink-0"
+                    className="accent-primary shrink-0 mt-1 sm:mt-0"
                   />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-ink truncate">{p.name}</p>
+                  <div className="min-w-0 sm:flex-1">
+                    <p className="text-sm font-bold text-ink break-words sm:truncate">{p.name}</p>
                     <p className="text-xs text-ink-faint">{p.product_categories?.name ?? 'Uncategorized'}{p.volume ? ` · ${p.volume}` : ''}</p>
                   </div>
                   {!p.is_active && <span className="text-[10px] font-bold text-ink-faint bg-surface-sunken px-2 py-0.5 rounded-full shrink-0">Inactive</span>}
-                  <span className="text-xs text-ink-faint tabular shrink-0 w-16 text-right">{p.stocks} left</span>
-                  <span className="text-sm font-bold text-gold tabular shrink-0 w-20 text-right">{formatPeso(p.price)}</span>
+                  {/* Mobile: stock + price sit on their own row under the name. sm+: contents → back inline in the single row. */}
+                  <div className="col-start-2 col-span-2 flex items-center justify-between gap-3 sm:contents">
+                    <span className="text-xs text-ink-faint tabular sm:shrink-0 sm:w-16 sm:text-right">{p.stocks} left</span>
+                    <span className="text-sm font-bold text-gold tabular sm:shrink-0 sm:w-20 sm:text-right">{formatPeso(p.price)}</span>
+                  </div>
                 </button>
               ))}
             </div>
